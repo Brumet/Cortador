@@ -246,3 +246,26 @@ def test_no_salen_piezas_sin_grosor():
     for pieza in res.pieces:
         assert min(float(v) for v in pieza.size) > 0.05, f"{pieza.name}: {pieza.size}"
         assert pieza.outline is not None, f"{pieza.name} se quedaria sin plano 2D"
+
+
+def test_tambien_se_limpian_las_motas_en_macizo():
+    """Una seccion casi tangente al plano no debe generar confeti."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    # una cupula: cerca de la cima el corte roza la superficie
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150)
+    try:
+        trimesh.smoothing.filter_taubin(esfera, iterations=4)
+    except Exception:
+        pass
+    cfg = SliceConfig(printer=PrinterSpec(500, 500, 500), mode="slabs",
+                      slab_thickness=25.0, slab_style="prism", min_piece=6.0,
+                      labels=LabelOptions(enabled=False))
+    res = slice_model(esfera, cfg)
+    for pieza in res.pieces:
+        medidas = sorted(float(v) for v in pieza.size)
+        assert medidas[1] >= 6.0, f"{pieza.name}: {pieza.size}"
+    # y no debe explotar en cientos de trozos
+    assert res.count < 40

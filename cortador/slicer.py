@@ -13,7 +13,7 @@ from .config import SliceConfig, axis_index
 from .geometry import (EPS, clip_slab, extrude_polygons, largest_polygon,
                        merge_polygons, plane_transform, section_polygons)
 from . import joinery as jn
-from .hollow import hollow_mesh, hollow_region, hollow_slab, savings
+from .hollow import hollow_mesh, hollow_region, hollow_slab, limpiar, savings
 from .font import text_size
 from .labels import apply_label
 from .meshio import apply_units_and_scale, is_empty, mesh_stats, weld_bodies
@@ -423,15 +423,21 @@ def _build_prisms(mesh: trimesh.Trimesh,
                 if region.is_empty or region.area <= EPS:
                     report(done, total, etapa)
                     continue
+                limpiar_despues = True
                 if cfg.hollow and not _es_tapa(k, layers, cfg):
                     tam = None
                     if cfg.labels.enabled and cfg.label_tab:
                         nombre = plan.name_for(index, cfg.naming)
                         tam = text_size(f"{cfg.labels.prefix}{nombre}x", cfg.labels.size)
                     region = hollow_region(region, cfg.wall, tam, cfg.min_piece)
-                    if region is None or region.is_empty:
-                        report(done, total, etapa)
-                        continue
+                    limpiar_despues = False
+                if limpiar_despues:
+                    # tambien en macizo: una seccion casi tangente al plano deja
+                    # decenas de motas que no son piezas
+                    region = limpiar(region, cfg.min_piece)
+                if region is None or region.is_empty:
+                    report(done, total, etapa)
+                    continue
                 solid = extrude_polygons(region, height)
                 if solid is None:
                     report(done, total, etapa)

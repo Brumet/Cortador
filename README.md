@@ -395,7 +395,7 @@ export_result(resultado, "salida/", mesh_format="stl")
 
 ```bash
 pip install -e ".[web,dev]"
-pytest -q                                   # 161 pruebas
+pytest -q                                   # 162 pruebas
 python examples/gorila_demo.py gorila.stl   # gorila de prueba de 1,8 m
 python examples/figura_demo.py figura.stl   # figura simple de prueba
 ```
