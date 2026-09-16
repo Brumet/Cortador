@@ -23,7 +23,9 @@ dependencies = [
 
 [project.optional-dependencies]
 web = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9"]
-dev = ["pytest>=7.0"]
+# httpx / httpx2: los necesita el cliente de pruebas de FastAPI (segun la
+# version de starlette pide uno u otro, asi que declaramos los dos)
+dev = ["pytest>=7.0", "httpx>=0.27", "httpx2>=2.0"]
 
 [project.scripts]
 cortador = "cortador.cli:main"

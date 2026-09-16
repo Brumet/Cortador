@@ -4,7 +4,11 @@ import time
 
 import pytest
 import trimesh
-from fastapi.testclient import TestClient
+
+# el cliente de pruebas de FastAPI necesita httpx (o httpx2); si falta, mejor
+# saltar estas pruebas que romper toda la bateria
+TestClient = pytest.importorskip("fastapi.testclient",
+                                 reason="falta httpx para el cliente de pruebas").TestClient
 
 from cortador.web.server import create_app
 
