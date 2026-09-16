@@ -20,11 +20,11 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
   )
   ".venv\Scripts\python.exe" -m pip install --upgrade pip
-  ".venv\Scripts\python.exe" -m pip install -e ".[web]"
+  ".venv\Scripts\python.exe" -m pip install -e ".[web,app]"
 )
 
 echo.
-echo  Abriendo Cortador en el navegador... (cierra esta ventana para salir)
+echo  Abriendo Cortador... (cierra esta ventana para salir)
 echo.
-".venv\Scripts\python.exe" -m cortador.cli web
+".venv\Scripts\python.exe" -m cortador.cli app
 pause
