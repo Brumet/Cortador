@@ -220,14 +220,14 @@
   <section class="lienzo">
     <canvas id="vista"></canvas>
 
-    <div class="hud-superior" id="resumen">
+    <div class="hud-superior" id="resumen" hidden>
       <div class="dato"><b id="r-piezas">-</b><span>piezas</span></div>
       <div class="dato"><b id="r-rejilla">-</b><span>rejilla</span></div>
       <div class="dato"><b id="r-mayor">-</b><span>pieza mayor mm</span></div>
       <div class="dato"><b id="r-tamano">-</b><span>modelo mm</span></div>
     </div>
 
-    <div class="hud-inferior">
+    <div class="hud-inferior" id="controles" hidden>
       <label>Separar <input type="range" id="explosion" min="0" max="150" value="0"></label>
       <label>Capa <input type="range" id="capa" min="0" max="0" value="0"> <span id="capa-txt" class="valor">todas</span></label>
       <label class="fila"><span class="interruptor pequeno"><input type="checkbox" id="ver-rejilla" checked><i></i></span> rejilla</label>

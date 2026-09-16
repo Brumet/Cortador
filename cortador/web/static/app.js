@@ -138,6 +138,8 @@ async function cargarArchivo(file) {
     $('btn-guia').hidden = true;
     $('btn-abrir').hidden = true;
     $('vacio').hidden = true;
+    $('resumen').hidden = false;
+    $('controles').hidden = false;
     $('pista-lista').hidden = false;
     $('lista').innerHTML = '';
     $('contador').textContent = '';
