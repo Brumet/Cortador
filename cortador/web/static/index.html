@@ -137,6 +137,28 @@
           Partir la lamina si no cabe</label>
       </div>
 
+      <label class="fila"><span class="interruptor"><input type="checkbox" id="hueco"><i></i></span>
+        Vaciar el interior (solo la piel)</label>
+      <div id="opciones-hueco" hidden>
+        <label class="grande">Espesor de la pared
+          <div class="con-unidad">
+            <input type="number" id="pared" value="3" min="0.4" step="0.5"><span>mm</span>
+          </div>
+        </label>
+        <div class="chips" id="paredes"></div>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="tapas" checked><i></i></span>
+          Primera y ultima lamina macizas</label>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="lengueta" checked><i></i></span>
+          Plaquita interior para la marca</label>
+        <label>Descartar trozos menores de
+          <div class="con-unidad">
+            <input type="number" id="minima" value="5" min="0" step="1"><span>mm</span>
+          </div>
+        </label>
+        <p class="pista">El modelo se queda hueco por dentro, como una piel: se
+          fabrica una fraccion del material y pesa mucho menos.</p>
+      </div>
+
       <label>Holgura entre piezas (kerf)
         <div class="con-unidad">
           <input type="number" id="kerf" value="0" min="0" step="0.1"><span>mm</span>
@@ -237,8 +259,24 @@
     <div class="aviso" id="avisos" hidden></div>
 
     <div class="cargando" id="cargando" hidden>
-      <div class="barra-progreso"><div id="progreso"></div></div>
-      <span id="progreso-txt">Cortando...</span>
+      <div class="tarjeta-progreso">
+        <div class="girador"></div>
+        <b id="progreso-etapa">Preparando</b>
+        <div class="barra-progreso"><div id="progreso"></div></div>
+        <div class="progreso-datos">
+          <span id="progreso-txt">0 / 0</span>
+          <span id="progreso-tiempo">0:00</span>
+        </div>
+        <p class="pista" id="progreso-consejo"></p>
+      </div>
+    </div>
+
+    <div class="cargando" id="abriendo" hidden>
+      <div class="tarjeta-progreso">
+        <div class="girador"></div>
+        <b id="abriendo-etapa">Leyendo el modelo</b>
+        <p class="pista" id="abriendo-txt">Los archivos grandes tardan un poco.</p>
+      </div>
     </div>
 
     <div class="vacio" id="vacio">

@@ -68,6 +68,11 @@ function leerConfig() {
     slab_fit: $('ajuste-lamina').value,
     split_slabs_to_fit: $('subdividir').checked,
     divisions: div,
+    hollow: $('hueco').checked,
+    wall: num('pared', 3),
+    solid_caps: $('tapas').checked,
+    label_tab: $('lengueta').checked,
+    min_piece: num('minima', 5),
     kerf: num('kerf', 0),
     scale: num('escala', 1),
     target_size: $('tamano').value ? num('tamano', 0) : null,
@@ -119,10 +124,82 @@ async function api(url, opciones) {
   return res;
 }
 
+// ------------------------------------------------------------ progreso
+const CONSEJOS = [
+  'Cada pieza se marca con su nombre en una cara de corte.',
+  'El vaciado deja el modelo hueco: mucho menos material y menos horas.',
+  'Las laminas planas salen tambien en SVG y DXF para la laser.',
+  'Puedes descargar una pieza suelta desde la lista del despiece.',
+  'Con muchas laminas el corte tarda mas: sigue trabajando.',
+  'La guia de armado te dice que pieza va con cual, capa por capa.',
+];
+
+const reloj = { inicio: 0, id: null, muestras: [] };
+
+function relojArrancar(etapa) {
+  reloj.inicio = Date.now();
+  reloj.muestras = [];
+  let consejo = 0;
+  $('progreso-etapa').textContent = etapa || 'Preparando';
+  $('progreso-consejo').textContent = CONSEJOS[0];
+  $('progreso').style.width = '0%';
+  $('progreso-txt').textContent = '';
+  clearInterval(reloj.id);
+  reloj.id = setInterval(() => {
+    const seg = (Date.now() - reloj.inicio) / 1000;
+    $('progreso-tiempo').textContent = formatoTiempo(seg) + restante();
+    if (seg > 5 && Math.floor(seg / 6) !== consejo) {
+      consejo = Math.floor(seg / 6);
+      $('progreso-consejo').textContent = CONSEJOS[consejo % CONSEJOS.length];
+    }
+  }, 250);
+}
+
+function relojParar() {
+  clearInterval(reloj.id);
+  reloj.id = null;
+}
+
+function formatoTiempo(seg) {
+  const m = Math.floor(seg / 60);
+  const s = Math.floor(seg % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function restante() {
+  // estimacion con el ritmo de los ultimos avances
+  const m = reloj.muestras;
+  if (m.length < 3) return '';
+  const [t0, p0] = m[0];
+  const [t1, p1] = m[m.length - 1];
+  if (p1 <= p0 || p1 >= 1) return '';
+  const total = (t1 - t0) / (p1 - p0);
+  const falta = total * (1 - p1);
+  if (!Number.isFinite(falta) || falta < 2 || falta > 36000) return '';
+  return `  ·  quedan ~${formatoTiempo(falta)}`;
+}
+
+function marcarAvance(hecho, total, etapa) {
+  const pct = Math.max(0, Math.min(1, hecho / Math.max(total, 1)));
+  $('progreso').style.width = (pct * 100).toFixed(1) + '%';
+  $('progreso-etapa').textContent = etapa || 'Trabajando';
+  $('progreso-txt').textContent = total > 1 ? `${hecho} / ${total}` : '';
+  const ahora = (Date.now() - reloj.inicio) / 1000;
+  if (pct > 0) reloj.muestras.push([ahora, pct]);
+  if (reloj.muestras.length > 40) reloj.muestras.shift();
+}
+
 // ------------------------------------------------------------ carga del modelo
 async function cargarArchivo(file) {
   if (!file) return;
-  $('nombre-archivo').textContent = 'cargando ' + file.name + '...';
+  $('nombre-archivo').textContent = 'abriendo ' + file.name + '...';
+  $('vacio').hidden = true;
+  $('abriendo').hidden = false;
+  $('abriendo-etapa').textContent = 'Leyendo ' + file.name;
+  $('abriendo-txt').textContent =
+    file.size > 20e6 ? 'Son ' + (file.size / 1e6).toFixed(0)
+      + ' MB: puede tardar un minuto. No cierres la ventana.'
+      : 'Revisando la malla y reparandola si hace falta...';
   const datos = new FormData();
   datos.append('archivo', file);
   try {
@@ -149,7 +226,10 @@ async function cargarArchivo(file) {
     actualizarPlan();
   } catch (err) {
     $('nombre-archivo').textContent = 'ningun modelo cargado';
+    $('vacio').hidden = !!estado.trabajo;
     mostrarAvisos([err.message], true);
+  } finally {
+    $('abriendo').hidden = true;
   }
 }
 
@@ -253,9 +333,9 @@ function pintarRejilla() {
 async function cortar() {
   if (!estado.trabajo) return;
   $('btn-cortar').disabled = true;
+  $('btn-cortar').textContent = 'Cortando...';
   $('cargando').hidden = false;
-  $('progreso').style.width = '0%';
-  $('progreso-txt').textContent = 'Preparando...';
+  relojArrancar('Preparando el modelo');
   try {
     await api('/api/cortar', {
       method: 'POST',
@@ -269,7 +349,9 @@ async function cortar() {
     mostrarAvisos([err.message], true);
     $('cargando').hidden = true;
   }
+  relojParar();
   $('btn-cortar').disabled = false;
+  $('btn-cortar').textContent = 'Cortar';
 }
 
 async function seguirProgreso() {
@@ -282,9 +364,7 @@ async function seguirProgreso() {
       mostrarAvisos([err.message], true);
       break;
     }
-    const pct = Math.round(100 * info.hecho / Math.max(info.total, 1));
-    $('progreso').style.width = pct + '%';
-    $('progreso-txt').textContent = `${info.mensaje || 'Cortando'} ${info.hecho}/${info.total}`;
+    marcarAvance(info.hecho, info.total, info.mensaje);
     if (info.estado === 'listo') {
       estado.resumen = info.resumen;
       await verPiezas();
@@ -295,6 +375,7 @@ async function seguirProgreso() {
       break;
     }
   }
+  relojParar();
   $('cargando').hidden = true;
 }
 
@@ -401,6 +482,10 @@ $('modo').querySelectorAll('button').forEach((b) => {
     actualizarPlan();
   });
 });
+$('hueco').addEventListener('change', () => {
+  $('opciones-hueco').hidden = !$('hueco').checked;
+  actualizarPlan();
+});
 $('espigas').addEventListener('change', () => {
   $('opciones-espigas').hidden = $('espigas').value === 'none';
 });
@@ -417,7 +502,7 @@ $('capa').addEventListener('input', (e) => {
   const v = parseInt(e.target.value, 10) || 0;
   visor.layer = v;
   $('capa-txt').textContent = v ? 'L' + String(v).padStart(2, '0') : 'todas';
-  visor.render();
+  visor.frameAll();
   pintarLista();
 });
 $('ver-rejilla').addEventListener('change', (e) => {
@@ -428,7 +513,7 @@ $('ver-rejilla').addEventListener('change', (e) => {
 
 ['px', 'py', 'pz', 'margen', 'espesor', 'eje', 'estilo-lamina', 'ajuste-lamina',
  'subdividir', 'kerf', 'divisiones', 'escala', 'tamano', 'tamano-eje', 'unidades',
- 'motor', 'unir'].forEach((id) => {
+ 'motor', 'unir', 'pared', 'tapas', 'lengueta', 'minima'].forEach((id) => {
   $(id).addEventListener('change', actualizarPlan);
   if (['number', 'text'].includes($(id).type)) $(id).addEventListener('input', actualizarPlan);
 });
@@ -465,6 +550,11 @@ chips('alturas', [
   { texto: '1,5 m', v: 1500 }, { texto: '1,8 m', v: 1800 }, { texto: '2 m', v: 2000 },
   { texto: 'original', v: '' },
 ], (i) => { $('tamano').value = i.v; });
+
+chips('paredes', [
+  { texto: '1,5 mm', v: 1.5 }, { texto: '2 mm', v: 2 }, { texto: '3 mm', v: 3 },
+  { texto: '5 mm', v: 5 }, { texto: '8 mm', v: 8 },
+], (i) => { $('pared').value = i.v; });
 
 chips('espesores', [
   { texto: '3 mm', v: 3 }, { texto: '5 mm', v: 5 }, { texto: '10 mm', v: 10 },

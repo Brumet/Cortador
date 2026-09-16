@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional, Tuple
 
 import numpy as np
@@ -15,7 +16,7 @@ from .font import CAP_HEIGHT, text_polygons, text_size
 from .geometry import (EPS, boolean_op, extrude_polygons, largest_polygon,
                        merge_polygons, plane_transform, section_polygons)
 
-MIN_SIZE = 2.0  # altura minima de letra util (mm)
+MIN_SIZE = 1.0  # altura minima de letra util (mm)
 
 
 def label_region(mesh: trimesh.Trimesh,
@@ -35,6 +36,45 @@ def label_region(mesh: trimesh.Trimesh,
     return largest_polygon(polys)
 
 
+def _dentro(region, x: float, y: float) -> bool:
+    from shapely.geometry import Point
+    return region.contains(Point(x, y))
+
+
+def _alcance(region, cx: float, cy: float, dx: float, dy: float,
+             limite: float) -> float:
+    """Cuanto se puede avanzar desde (cx, cy) en una direccion sin salirse."""
+    lejos, cerca = limite, 0.0
+    for _ in range(12):
+        medio = (lejos + cerca) / 2.0
+        if _dentro(region, cx + dx * medio, cy + dy * medio):
+            cerca = medio
+        else:
+            lejos = medio
+    return cerca
+
+
+def _mejor_orientacion(region, cx: float, cy: float, pasos: int = 18):
+    """Angulo en el que mas texto cabe, y el hueco perpendicular disponible.
+
+    En una lamina hueca la pared es un anillo estrecho: el texto solo entra si
+    se escribe siguiendo la pared, no cruzandola. Esto busca esa direccion.
+    """
+    minx, miny, maxx, maxy = region.bounds
+    limite = max(maxx - minx, maxy - miny)
+    mejor = (0.0, 0.0, 0.0)
+    for i in range(pasos):
+        ang = math.pi * i / pasos
+        dx, dy = math.cos(ang), math.sin(ang)
+        largo = (_alcance(region, cx, cy, dx, dy, limite)
+                 + _alcance(region, cx, cy, -dx, -dy, limite))
+        if largo > mejor[1]:
+            ancho = (_alcance(region, cx, cy, -dy, dx, limite)
+                     + _alcance(region, cx, cy, dy, -dx, limite))
+            mejor = (ang, largo, ancho)
+    return mejor
+
+
 def fit_text(text: str,
              region: Polygon,
              opts: LabelOptions,
@@ -46,7 +86,9 @@ def fit_text(text: str,
     """
     if region is None or region.is_empty:
         return None
-    margin = max(opts.stroke, 1.0)
+    # margen minimo: en una lamina hueca la pared puede tener 3 mm y no hay
+    # sitio que malgastar; que el texto quepa lo decide la comprobacion final
+    margin = 0.2
     usable = region.buffer(-margin)
     if usable.is_empty:
         usable = region
@@ -60,34 +102,33 @@ def fit_text(text: str,
         center_pt = anchor.representative_point()
     cx, cy = center_pt.x, center_pt.y
 
-    minx, miny, maxx, maxy = anchor.bounds
-    rotate = (maxy - miny) > (maxx - minx) * 1.6 and len(text) > 2
+    # direccion en la que cabe mas texto (clave en las piezas huecas)
+    angulo, largo, ancho = _mejor_orientacion(anchor, cx, cy)
+    grados = math.degrees(angulo)
 
     size = float(opts.size)
-    for _ in range(14):
+    for _ in range(22):
         if size < MIN_SIZE:
             return None
-        stroke = max(opts.stroke * size / max(opts.size, EPS), 0.3)
+        stroke = max(opts.stroke * size / max(opts.size, EPS), 0.15)
         width, height = text_size(text, size)
-        if rotate:
-            width, height = height, width
-        probe = shapely_box(cx - width / 2.0 - stroke, cy - height / 2.0 - stroke,
-                            cx + width / 2.0 + stroke, cy + height / 2.0 + stroke)
-        if anchor.contains(probe):
+        if width + stroke <= largo and height + stroke <= ancho:
             geom = text_polygons(text, size=size, stroke=stroke)
             if geom is None:
                 return None
-            if rotate:
-                geom = affinity.rotate(geom, 90, origin=(0, 0))
             if mirror:
                 geom = affinity.scale(geom, xfact=-1.0, yfact=1.0, origin=(0, 0))
+            if abs(grados) > 1.0:
+                geom = affinity.rotate(geom, grados, origin=(0, 0))
             geom = affinity.translate(geom, xoff=cx, yoff=cy)
-            if not anchor.buffer(1e-6).contains(geom):
-                geom = geom.intersection(anchor)
-                if geom.is_empty:
-                    return None
-            return geom, size
-        size *= 0.82
+            recortado = geom.intersection(anchor)
+            if recortado.is_empty:
+                return None
+            if recortado.area < geom.area * 0.97:
+                size *= 0.85          # se sale por los bordes: probar mas pequeno
+                continue
+            return recortado, size
+        size *= 0.85
     return None
 
 

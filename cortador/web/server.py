@@ -283,13 +283,14 @@ def _run_job(job: Job, cfg: SliceConfig, formato: str, al_origen: bool = True) -
     try:
         result = slice_model(job.mesh, cfg, progress=progress)
         job.result = result
-        job.message = "Exportando"
+        job.message = "Exportando las piezas"
         outdir = os.path.join(job.directory, "salida")
         shutil.rmtree(outdir, ignore_errors=True)
         os.makedirs(outdir, exist_ok=True)
         name = os.path.splitext(os.path.basename(job.filename))[0] or "modelo"
         export_result(result, outdir, mesh_format=formato, model_name=name,
                       place_at_origin=al_origen, progress=progress)
+        progress(0, 1, "Comprimiendo el ZIP")
         job.zip_path = zip_directory(outdir, os.path.join(job.directory, f"{name}_cortado.zip"))
         job.state = "listo"
         job.message = "Listo"
@@ -336,7 +337,10 @@ def _original_payload(job: Job) -> bytes:
         "pieces": [{"name": job.filename or "modelo", "layer": 1, "index": [0, 0, 0],
                     "color": [176, 182, 194], "offset": 0, "count": int(len(tris)),
                     "center": [float(v) for v in mesh.bounds.mean(axis=0)],
-                    "size": [float(v) for v in mesh.extents], "notes": []}],
+                    "size": [float(v) for v in mesh.extents],
+                    "bounds": [[float(v) for v in mesh.bounds[0]],
+                               [float(v) for v in mesh.bounds[1]]],
+                    "notes": []}],
         "bounds": [[float(v) for v in mesh.bounds[0]], [float(v) for v in mesh.bounds[1]]],
     }
     from ..exporters import _padded_header

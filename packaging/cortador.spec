@@ -14,7 +14,9 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 raiz = os.path.abspath(os.getcwd())
 es_windows = sys.platform.startswith("win")
 
-datas = [(os.path.join(raiz, "cortador", "web", "static"), "cortador/web/static")]
+datas = [(os.path.join(raiz, "cortador", "web", "static"), "cortador/web/static"),
+         (os.path.join(raiz, "packaging", "cortador.png"), "packaging"),
+         (os.path.join(raiz, "packaging", "cortador.ico"), "packaging")]
 binaries = []
 hiddenimports = [
     "uvicorn.logging", "uvicorn.loops", "uvicorn.loops.auto", "uvicorn.loops.asyncio",
@@ -26,7 +28,7 @@ hiddenimports = [
     "manifold3d", "mapbox_earcut", "rtree", "scipy.spatial", "scipy.sparse.csgraph",
 ]
 
-for paquete in ("trimesh", "shapely", "fastapi", "starlette", "pydantic"):
+for paquete in ("trimesh", "shapely", "fastapi", "starlette", "pydantic", "webview"):
     try:
         paquete_datas, paquete_binaries, paquete_hidden = collect_all(paquete)
         datas += paquete_datas
@@ -58,7 +60,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    console=False,   # aplicacion de escritorio: sin ventana negra de consola
     disable_windowed_traceback=False,
     icon=icono if os.path.exists(icono) else None,
 )

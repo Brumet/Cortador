@@ -19,15 +19,31 @@ def main() -> None:
         print(f"Cortador {__version__} listo")
         return
     os.environ.setdefault("CORTADOR_EMPAQUETADO", "1")
-    from cortador.web.server import run
+    from cortador.desktop import run
     try:
-        run(host="127.0.0.1", port=8000, open_browser=True)
+        run(host="127.0.0.1", port=8000)
     except KeyboardInterrupt:
         pass
-    except Exception as exc:  # que el usuario vea el error antes de cerrarse
-        print(f"\nCortador no ha podido arrancar: {exc}\n")
-        input("Pulsa Intro para cerrar...")
+    except Exception as exc:  # sin consola visible: dejar rastro y avisar
+        _reportar(exc)
         sys.exit(1)
+
+
+def _reportar(exc: Exception) -> None:
+    import traceback
+    mensaje = f"Cortador no ha podido arrancar:\n\n{exc}"
+    try:
+        destino = os.path.join(os.path.dirname(sys.executable), "cortador_error.log")
+        with open(destino, "w", encoding="utf-8") as fh:
+            fh.write(traceback.format_exc())
+        mensaje += f"\n\nDetalles en:\n{destino}"
+    except Exception:
+        pass
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, mensaje, "Cortador", 0x10)
+    except Exception:
+        print(mensaje)
 
 
 if __name__ == "__main__":

@@ -119,6 +119,12 @@ def assembly_guide(result: SliceResult, model_name: str = "modelo") -> str:
         lines.append("- Modo: trozos que caben en la maquina")
     lines.append(f"- Rejilla de corte: {nx} x {ny} x {nz}")
     lines.append(f"- Piezas: **{result.count}**")
+    if cfg.hollow:
+        lines.append(f"- Modelo **vaciado**: piel de {cfg.wall:g} mm, hueco por dentro"
+                     + (" (primera y ultima lamina macizas)" if cfg.solid_caps else ""))
+        if result.solid_volume > 0:
+            from .hollow import savings
+            lines.append(f"- Material: {savings(result.solid_volume, result.hollow_volume)}")
     if cfg.kerf:
         lines.append(f"- Holgura entre piezas (kerf): {cfg.kerf:g} mm")
     if cfg.joinery.mode != "none":
@@ -213,6 +219,8 @@ def preview_payload(result: SliceResult, max_triangles: int = 300_000) -> bytes:
             "count": int(len(tris)),
             "center": [float(v) for v in center],
             "size": [float(v) for v in piece.size],
+            "bounds": [[float(v) for v in piece.mesh.bounds[0]],
+                       [float(v) for v in piece.mesh.bounds[1]]],
             "notes": list(piece.notes),
         })
         offset += len(tris)

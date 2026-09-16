@@ -13,6 +13,8 @@ from .config import SliceConfig, axis_index
 from .geometry import (EPS, clip_slab, extrude_polygons, largest_polygon,
                        merge_polygons, plane_transform, section_polygons)
 from . import joinery as jn
+from .hollow import hollow_mesh, hollow_region, hollow_slab, savings
+from .font import text_size
 from .labels import apply_label
 from .meshio import apply_units_and_scale, is_empty, mesh_stats, weld_bodies
 from .planner import CutPlan, plan_cuts
@@ -66,6 +68,9 @@ class SliceResult:
     source: dict
     warnings: List[str] = field(default_factory=list)
     dowels: int = 0
+    #: volumen macizo y volumen real, para saber cuanto material se ahorra
+    solid_volume: float = 0.0
+    hollow_volume: float = 0.0
 
     @property
     def count(self) -> int:
@@ -83,6 +88,8 @@ class SliceResult:
             "piezas": [p.to_dict() for p in self.pieces],
             "total_piezas": self.count,
             "espigas": self.dowels,
+            "volumen_cm3": round(self.hollow_volume / 1000.0, 1),
+            "volumen_macizo_cm3": round(self.solid_volume / 1000.0, 1),
             "piezas_fuera_de_capacidad": [p.name for p in self.oversized()],
             "avisos": list(self.warnings),
         }
@@ -118,6 +125,15 @@ def slice_model(mesh: trimesh.Trimesh,
         if progress:
             progress(done, total, msg)
 
+    report(0, 1, "Preparando el modelo")
+
+    volumen_macizo = float(work.volume) if work.is_volume else 0.0
+    if cfg.hollow and cfg.mode == "chunks":
+        report(0, 1, "Vaciando el interior")
+        work, aviso = hollow_mesh(work, cfg.wall)
+        if aviso:
+            warnings.append(aviso)
+
     total_steps = plan.total_cells
     report(0, total_steps, "Cortando")
 
@@ -126,24 +142,37 @@ def slice_model(mesh: trimesh.Trimesh,
     else:
         raw = _build_chunks(work, plan, cfg, report)
 
+    if cfg.hollow and cfg.mode == "slabs" and cfg.slab_style == "solid":
+        raw = _hollow_slabs(raw, plan, cfg, report)
+
     pieces: List[Piece] = []
-    by_index: Dict[Tuple[int, int, int], Piece] = {}
+    descartadas: List[float] = []
+    by_index: Dict[Tuple[int, int, int], List[Piece]] = {}
     for index, piece_mesh, outline in raw:
         if piece_mesh is None or is_empty(piece_mesh):
             continue
         lo, hi = plan.cell_bounds(index)
-        piece = Piece(
-            name=plan.name_for(index, cfg.naming),
-            index=index,
-            layer=plan.layer_of(index),
-            mesh=piece_mesh,
-            cell_lo=lo,
-            cell_hi=hi,
-            outline=outline,
-            outline_axis=plan.layer_axis,
+        base = plan.name_for(index, cfg.naming)
+        for nombre, trozo, contorno in _separar_islas(base, piece_mesh, outline, cfg,
+                                                      descartadas):
+            piece = Piece(
+                name=nombre,
+                index=index,
+                layer=plan.layer_of(index),
+                mesh=trozo,
+                cell_lo=lo,
+                cell_hi=hi,
+                outline=contorno,
+                outline_axis=plan.layer_axis,
+            )
+            pieces.append(piece)
+            by_index.setdefault(index, []).append(piece)
+
+    if descartadas:
+        warnings.append(
+            f"Se han descartado {len(descartadas)} trozos sueltos de menos de "
+            f"{cfg.min_piece:g} mm: son esquirlas que no se pueden fabricar."
         )
-        pieces.append(piece)
-        by_index[index] = piece
 
     _link_neighbors(pieces, by_index, plan)
 
@@ -156,9 +185,13 @@ def slice_model(mesh: trimesh.Trimesh,
         report(0, len(pieces), "Marcando piezas")
         _apply_labels(pieces, plan, cfg, report)
 
+    volumen_real = float(sum(p.mesh.volume for p in pieces if p.mesh.is_volume))
     result = SliceResult(pieces=pieces, plan=plan, config=cfg,
                          source={"original": source_stats, "escalado": prepared_stats},
-                         warnings=warnings, dowels=dowels)
+                         warnings=warnings, dowels=dowels,
+                         solid_volume=volumen_macizo, hollow_volume=volumen_real)
+    if cfg.hollow and volumen_macizo > 0 and volumen_real < volumen_macizo * 0.99:
+        result.warnings.append("Modelo vaciado: " + savings(volumen_macizo, volumen_real) + ".")
     over = result.oversized()
     if over:
         result.warnings.append(
@@ -203,6 +236,105 @@ def _build_chunks(mesh: trimesh.Trimesh,
                     out.append(((i, j, k), cell, None))
                 report(done, total, "Cortando")
     return out
+
+
+def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
+    """Descarta esquirlas: trozos tan pequenos que no se pueden fabricar.
+
+    Se mira la segunda dimension mas pequena: un palillo de 2 x 3 x 25 mm es
+    inservible aunque mida 25 mm de largo.
+    """
+    minimo = float(cfg.min_piece)
+    if minimo <= 0:
+        return True
+    medidas = sorted(float(v) for v in malla.extents)
+    return medidas[1] >= minimo
+
+
+def _separar_islas(base: str,
+                   malla: trimesh.Trimesh,
+                   outline,
+                   cfg: SliceConfig,
+                   descartadas: Optional[List[float]] = None):
+    """Parte una celda en sus trozos sueltos: cada uno es una pieza real.
+
+    Una lamina a la altura de las piernas de una figura son dos anillos que no
+    se tocan: hay que fabricarlos, nombrarlos y marcarlos por separado.
+    """
+    if not cfg.split_islands:
+        return [(base, malla, outline)]
+    try:
+        trozos = malla.split(only_watertight=False)
+    except Exception:
+        trozos = []
+    if len(trozos) < 2:
+        return [(base, malla, outline)] if _es_util(malla, cfg) else []
+
+    utiles = []
+    for trozo in trozos:
+        if is_empty(trozo):
+            continue
+        if _es_util(trozo, cfg):
+            utiles.append(trozo)
+        elif descartadas is not None:
+            descartadas.append(float(np.max(trozo.extents)))
+    trozos = utiles
+    if not trozos:
+        return []
+    if len(trozos) == 1:
+        return [(base, trozos[0], _recortar_contorno(outline, trozos[0]))]
+
+    # de arriba abajo y de izquierda a derecha, para que las letras tengan logica
+    trozos = sorted(trozos, key=lambda t: (-t.bounds[1][1], t.bounds[0][0]))
+    salida = []
+    for i, trozo in enumerate(trozos):
+        sufijo = chr(ord("a") + i) if i < 26 else f"-{i + 1}"
+        salida.append((f"{base}{sufijo}", trozo, _recortar_contorno(outline, trozo)))
+    return salida
+
+
+def _recortar_contorno(outline, trozo: trimesh.Trimesh):
+    """Se queda con la parte del contorno 2D que corresponde a este trozo."""
+    if outline is None:
+        return None
+    partes = list(outline.geoms) if hasattr(outline, "geoms") else [outline]
+    lo, hi = trozo.bounds[0], trozo.bounds[1]
+    from shapely.geometry import box as shapely_box
+    caja = shapely_box(lo[0] - 0.01, lo[1] - 0.01, hi[0] + 0.01, hi[1] + 0.01)
+    dentro = [p for p in partes if p.intersects(caja) and caja.contains(p.representative_point())]
+    if not dentro:
+        return None
+    return merge_polygons(dentro)
+
+
+def _hollow_slabs(raw, plan: CutPlan, cfg: SliceConfig, report):
+    """Deja hueca cada rebanada solida, conservando su relieve exterior."""
+    axis = plan.layer_axis
+    capas = plan.counts[axis]
+    salida = []
+    total = len(raw)
+    for i, (index, malla, outline) in enumerate(raw, start=1):
+        report(i, total, "Vaciando las laminas")
+        if malla is None or _es_tapa(int(index[axis]), capas, cfg):
+            salida.append((index, malla, outline))
+            continue
+        lo, hi = plan.cell_bounds(index)
+        medio = (float(lo[axis]) + float(hi[axis])) / 2.0
+        seccion = merge_polygons(section_polygons(malla, axis, medio))
+        if seccion is None:
+            salida.append((index, malla, outline))
+            continue
+        hueca, _ok = hollow_slab(malla, seccion, cfg.wall,
+                                 float(lo[axis]), float(hi[axis]), axis)
+        salida.append((index, hueca, outline))
+    return salida
+
+
+def _es_tapa(indice_capa: int, total_capas: int, cfg: SliceConfig) -> bool:
+    """La primera y la ultima lamina se dejan macizas para cerrar la figura."""
+    if not cfg.solid_caps:
+        return False
+    return indice_capa == 0 or indice_capa == total_capas - 1
 
 
 def _split_axis(mesh: Optional[trimesh.Trimesh],
@@ -261,10 +393,11 @@ def _build_prisms(mesh: trimesh.Trimesh,
         z_hi = plan.edges[axis][k + 1] - (half if k < layers - 1 else 0.0)
         mid = (z_lo + z_hi) / 2.0
         height = max(z_hi - z_lo, EPS)
+        etapa = "Generando laminas huecas" if cfg.hollow else "Generando laminas"
         merged = merge_polygons(section_polygons(mesh, axis, mid))
         if merged is None:
             done += plan.counts[others[0]] * plan.counts[others[1]]
-            report(done, total, "Generando laminas")
+            report(done, total, etapa)
             continue
         for a in range(plan.counts[others[0]]):
             for b in range(plan.counts[others[1]]):
@@ -279,16 +412,25 @@ def _build_prisms(mesh: trimesh.Trimesh,
                 rect = shapely_box(lo[u], lo[v], hi[u], hi[v])
                 region = merged.intersection(rect)
                 if region.is_empty or region.area <= EPS:
-                    report(done, total, "Generando laminas")
+                    report(done, total, etapa)
                     continue
+                if cfg.hollow and not _es_tapa(k, layers, cfg):
+                    tam = None
+                    if cfg.labels.enabled and cfg.label_tab:
+                        nombre = plan.name_for(index, cfg.naming)
+                        tam = text_size(f"{cfg.labels.prefix}{nombre}x", cfg.labels.size)
+                    region = hollow_region(region, cfg.wall, tam, cfg.min_piece)
+                    if region is None or region.is_empty:
+                        report(done, total, etapa)
+                        continue
                 solid = extrude_polygons(region, height)
                 if solid is None:
-                    report(done, total, "Generando laminas")
+                    report(done, total, etapa)
                     continue
                 # extrude_polygon trabaja en XY: lo llevamos al plano real
                 solid.apply_transform(np.linalg.inv(plane_transform(axis, z_lo)))
                 out.append((index, solid, region))
-                report(done, total, "Generando laminas")
+                report(done, total, etapa)
     return out
 
 
@@ -300,17 +442,28 @@ def _face_key(axis: int, sign: int) -> str:
     return ("+" if sign > 0 else "-") + "xyz"[axis]
 
 
+def _solapan(a: Piece, b: Piece, axis: int) -> bool:
+    """True si las dos piezas se tocan de verdad en las otras dos direcciones."""
+    otros = [e for e in range(3) if e != axis]
+    for eje in otros:
+        if a.mesh.bounds[1][eje] <= b.mesh.bounds[0][eje] + 1e-6:
+            return False
+        if b.mesh.bounds[1][eje] <= a.mesh.bounds[0][eje] + 1e-6:
+            return False
+    return True
+
+
 def _link_neighbors(pieces: Sequence[Piece],
-                    by_index: Dict[Tuple[int, int, int], Piece],
+                    by_index: Dict[Tuple[int, int, int], List[Piece]],
                     plan: CutPlan) -> None:
     for piece in pieces:
         for axis, sign in FACES:
             nb_index = plan.neighbor(piece.index, axis, sign)
             if nb_index is None:
                 continue
-            nb = by_index.get(nb_index)
-            if nb is not None:
-                piece.neighbors[_face_key(axis, sign)] = nb.name
+            vecinas = [n for n in by_index.get(nb_index, []) if _solapan(piece, n, axis)]
+            if vecinas:
+                piece.neighbors[_face_key(axis, sign)] = ", ".join(n.name for n in vecinas)
 
 
 def _face_value(piece: Piece, axis: int, sign: int) -> float:
@@ -318,7 +471,7 @@ def _face_value(piece: Piece, axis: int, sign: int) -> float:
 
 
 def _apply_joinery(pieces: Sequence[Piece],
-                   by_index: Dict[Tuple[int, int, int], Piece],
+                   by_index: Dict[Tuple[int, int, int], List[Piece]],
                    plan: CutPlan,
                    cfg: SliceConfig,
                    report) -> int:
@@ -335,9 +488,10 @@ def _apply_joinery(pieces: Sequence[Piece],
             nb_index = plan.neighbor(piece.index, axis, sign)
             if nb_index is None:
                 continue
-            nb = by_index.get(nb_index)
-            if nb is None:
+            vecinas = [n for n in by_index.get(nb_index, []) if _solapan(piece, n, axis)]
+            if not vecinas:
                 continue
+            nb = vecinas[0]
             value_a = _face_value(piece, axis, +1)
             value_b = _face_value(nb, axis, -1)
             region_a = largest_polygon(section_polygons(piece.mesh, axis, value_a - 0.1))

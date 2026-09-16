@@ -170,3 +170,46 @@ def test_manifiesto(caja):
     assert len(man["piezas"]) == res.count
     assert man["plan"]["counts"] == list(res.plan.counts)
     assert "configuracion" in man and "modelo" in man
+
+
+def _dos_torres():
+    """Dos columnas separadas: cada lamina son dos piezas independientes."""
+    import trimesh
+    a = trimesh.creation.box(extents=[40, 40, 200])
+    a.apply_translation([-60, 0, 100])
+    b = trimesh.creation.box(extents=[40, 40, 200])
+    b.apply_translation([60, 0, 100])
+    return trimesh.util.concatenate([a, b])
+
+
+def test_las_islas_se_separan_en_piezas():
+    cfg = _cfg(printer=PrinterSpec(500, 500, 500), mode="slabs", slab_thickness=50.0,
+               slab_style="prism")
+    res = slice_model(_dos_torres(), cfg)
+    assert res.count == 8                      # 4 capas x 2 columnas
+    nombres = sorted(p.name for p in res.pieces if p.layer == 1)
+    assert nombres == ["L01a", "L01b"]
+    for pieza in res.pieces:
+        assert pieza.mesh.body_count == 1      # cada pieza es un solo cuerpo
+
+
+def test_sin_separar_islas_queda_una_pieza_por_capa():
+    cfg = _cfg(printer=PrinterSpec(500, 500, 500), mode="slabs", slab_thickness=50.0,
+               slab_style="prism", split_islands=False)
+    res = slice_model(_dos_torres(), cfg)
+    assert res.count == 4
+    assert res.pieces[0].mesh.body_count == 2
+
+
+def test_los_vecinos_respetan_las_islas():
+    cfg = _cfg(printer=PrinterSpec(500, 500, 500), mode="slabs", slab_thickness=50.0,
+               slab_style="prism")
+    res = slice_model(_dos_torres(), cfg)
+    por_nombre = {p.name: p for p in res.pieces}
+    izquierda = por_nombre["L01a"]
+    # solo se enlaza con la pieza que tiene justo encima, no con la otra columna
+    assert "+z" in izquierda.neighbors
+    arriba = izquierda.neighbors["+z"]
+    assert arriba in ("L02a", "L02b")
+    assert "," not in arriba
+    assert abs(por_nombre[arriba].mesh.bounds[0][0] - izquierda.mesh.bounds[0][0]) < 1.0

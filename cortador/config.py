@@ -114,6 +114,22 @@ class SliceConfig:
     #: divisiones forzadas por eje (None = calcular a partir de la impresora)
     divisions: Optional[Sequence[Optional[int]]] = None
 
+    # --- vaciado ------------------------------------------------------
+    #: vaciar el interior y dejar solo la piel del modelo
+    hollow: bool = False
+    #: espesor de esa piel (mm)
+    wall: float = 3.0
+    #: dejar macizas la primera y la ultima lamina, para cerrar la figura
+    solid_caps: bool = True
+    #: en las laminas huecas, anadir una lengueta interior donde grabar el nombre
+    label_tab: bool = True
+    #: separar en piezas distintas los trozos sueltos de una misma celda
+    #: (una lamina a la altura de las piernas son dos anillos independientes)
+    split_islands: bool = True
+    #: tamano minimo de una pieza (mm); por debajo se descarta, porque son
+    #: esquirlas que no se pueden fabricar ni pegar
+    min_piece: float = 5.0
+
     # --- comunes ------------------------------------------------------
     #: separacion entre piezas (holgura de ensamble); se reparte a ambos lados del corte
     kerf: float = 0.0
@@ -177,6 +193,8 @@ class SliceConfig:
             raise ValueError("joinery.mode debe ser 'none', 'holes' o 'pins'")
         if self.kerf < 0:
             raise ValueError("El kerf no puede ser negativo")
+        if self.hollow and self.wall <= 0:
+            raise ValueError("El espesor de pared debe ser mayor que cero")
         axis_index(self.slab_axis)
         axis_index(self.target_axis)
 

@@ -225,8 +225,26 @@ export class Viewer {
   // ---- camara -----------------------------------------------------
   frameAll() {
     this.pan = [0, 0, 0];
+    this._centerOn(this.pieces.filter((p) => this._visible(p)));
     this.distance = this._fitDistance();
     this.render();
+  }
+
+  _centerOn(piezas) {
+    // encuadra solo lo que esta a la vista (util al aislar una capa)
+    const cajas = piezas.map((p) => p.info.bounds).filter(Boolean);
+    if (!cajas.length) return;
+    const lo = [Infinity, Infinity, Infinity];
+    const hi = [-Infinity, -Infinity, -Infinity];
+    for (const [a, b] of cajas) {
+      for (let i = 0; i < 3; i++) {
+        lo[i] = Math.min(lo[i], a[i]);
+        hi[i] = Math.max(hi[i], b[i]);
+      }
+    }
+    this.center = [0, 1, 2].map((i) => (lo[i] + hi[i]) / 2);
+    this.radius = Math.max(
+      Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2, 1);
   }
 
   _fitDistance() {

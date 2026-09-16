@@ -81,6 +81,21 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
                         help="no partir las laminas aunque no quepan en la maquina")
     parser.add_argument("--divisiones", type=parse_divisions, default=None, metavar="NxNxN",
                         help="forzar el numero de divisiones por eje (usa '-' para automatico)")
+    parser.add_argument("--hueco", action="store_true",
+                        help="vaciar el interior y dejar solo la piel del modelo")
+    parser.add_argument("--pared", type=float, default=3.0,
+                        help="espesor de esa piel en mm (por defecto 3)")
+    parser.add_argument("--sin-tapas", action="store_true",
+                        help="vaciar tambien la primera y la ultima lamina")
+    parser.add_argument("--pieza-minima", type=float, default=5.0,
+                        help="descartar los trozos sueltos menores que esto (mm); "
+                             "0 para no descartar ninguno")
+    parser.add_argument("--sin-separar-islas", action="store_true",
+                        help="no separar en piezas distintas los trozos sueltos "
+                             "de una misma capa")
+    parser.add_argument("--sin-lengueta", action="store_true",
+                        help="no anadir la plaquita interior donde se graba el nombre "
+                             "de las laminas huecas")
     parser.add_argument("--kerf", type=float, default=0.0,
                         help="holgura entre piezas en mm (se reparte entre las dos caras)")
     parser.add_argument("--escala", type=float, default=1.0, help="escala uniforme del modelo")
@@ -143,6 +158,12 @@ def build_config(args) -> SliceConfig:
         slab_fit="exact" if args.ajuste_lamina == "exacto" else "even",
         split_slabs_to_fit=not args.no_subdividir_laminas,
         divisions=args.divisiones,
+        hollow=args.hueco,
+        wall=args.pared,
+        solid_caps=not args.sin_tapas,
+        label_tab=not args.sin_lengueta,
+        split_islands=not args.sin_separar_islas,
+        min_piece=args.pieza_minima,
         kerf=args.kerf,
         scale=args.escala,
         target_size=args.tamano,
@@ -285,6 +306,16 @@ def cmd_repair(args) -> int:
     return 0
 
 
+def cmd_app(args) -> int:
+    """Abre Cortador como aplicacion de escritorio, en su propia ventana."""
+    from .desktop import backend_disponible, run
+    hay, motor = backend_disponible()
+    if hay and not args.navegador:
+        print(f"Abriendo Cortador (ventana {motor})...")
+    return run(host=args.host, port=args.puerto,
+               forzar_navegador=args.navegador, debug=args.depurar)
+
+
 def cmd_web(args) -> int:
     try:
         import uvicorn  # noqa: F401
@@ -347,7 +378,15 @@ def build_parser() -> argparse.ArgumentParser:
                        help="abrir el modelo en 3D Builder de Windows para repararlo a mano")
     p_rep.set_defaults(func=cmd_repair)
 
-    p_web = sub.add_parser("web", help="abrir la interfaz grafica en el navegador")
+    p_app = sub.add_parser("app", help="abrir Cortador en su propia ventana (escritorio)")
+    p_app.add_argument("--puerto", type=int, default=8000)
+    p_app.add_argument("--host", default="127.0.0.1")
+    p_app.add_argument("--navegador", action="store_true",
+                       help="usar el navegador en vez de la ventana de escritorio")
+    p_app.add_argument("--depurar", action="store_true")
+    p_app.set_defaults(func=cmd_app)
+
+    p_web = sub.add_parser("web", help="abrir la interfaz en el navegador")
     p_web.add_argument("--puerto", type=int, default=8000)
     p_web.add_argument("--host", default="127.0.0.1")
     p_web.add_argument("--sin-navegador", action="store_true")
