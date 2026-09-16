@@ -6,7 +6,8 @@
 <p align="center"><b>by Brumet</b> · corta modelos 3D para gran formato</p>
 
 <p align="center">
-  <a href="https://github.com/Brumet/Cortador/releases/latest"><b>⬇ Descargar la app</b></a> ·
+  <a href="https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe"><b>⬇ Descargar para Windows</b></a> ·
+  <a href="https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux"><b>Linux</b></a> ·
   <a href="#instalacion">Instalacion</a> ·
   <a href="#uso-la-interfaz">Uso</a> ·
   <a href="#linea-de-comandos">Terminal</a>
@@ -31,9 +32,10 @@ servidor. Codigo libre con licencia MIT.
 
 ### Opcion 1 — la app, sin instalar nada (recomendada)
 
-1. Entra en **[Releases](https://github.com/Brumet/Cortador/releases/latest)**.
-2. Descarga **`Cortador-Windows.exe`** (o `Cortador-Linux`).
-3. Doble clic. Se abre solo en el navegador.
+1. Descarga **[Cortador-Windows.exe](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe)**
+   (o **[Cortador-Linux](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux)**).
+   Todas las versiones estan en **[Releases](https://github.com/Brumet/Cortador/releases/latest)**.
+2. Doble clic. Se abre solo en el navegador.
 
 No necesita Python, ni internet, ni permisos de administrador. Puedes llevarlo en
 un USB y usarlo en cualquier PC las veces que quieras.
