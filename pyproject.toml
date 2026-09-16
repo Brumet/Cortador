@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cortador"
+version = "0.1.0"
+description = "Cortador de modelos 3D para gran formato: divide mallas en piezas que caben en tu impresora, genera laminas de espesor fijo y marca cada pieza para poder armarla despues."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Brumet" }]
+dependencies = [
+    "numpy>=1.24",
+    "trimesh>=4.0",
+    "manifold3d>=2.3",
+    "shapely>=2.0",
+    "mapbox-earcut>=1.0",
+    "networkx>=3.0",
+    "rtree>=1.0",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "python-multipart>=0.0.9"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+cortador = "cortador.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cortador*"]
+
+[tool.setuptools.package-data]
+"cortador.web" = ["static/*", "static/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
