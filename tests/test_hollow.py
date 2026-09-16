@@ -230,3 +230,19 @@ def test_el_filtro_no_parte_los_anillos_buenos():
     assert con_filtro.count <= sin_filtro.count
     for pieza in con_filtro.pieces:
         assert pieza.mesh.body_count == 1
+
+
+def test_no_salen_piezas_sin_grosor():
+    """Las caras sueltas que deja el vaciado no deben acabar como piezas."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    figura = trimesh.creation.icosphere(subdivisions=4, radius=120)
+    cfg = SliceConfig(printer=PrinterSpec(220, 220, 250), mode="slabs",
+                      slab_thickness=20.0, slab_style="prism", hollow=True, wall=3.0,
+                      labels=LabelOptions(enabled=False))
+    res = slice_model(figura, cfg)
+    for pieza in res.pieces:
+        assert min(float(v) for v in pieza.size) > 0.05, f"{pieza.name}: {pieza.size}"
+        assert pieza.outline is not None, f"{pieza.name} se quedaria sin plano 2D"

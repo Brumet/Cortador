@@ -244,10 +244,12 @@ def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
     Se mira la segunda dimension mas pequena: un palillo de 2 x 3 x 25 mm es
     inservible aunque mida 25 mm de largo.
     """
+    medidas = sorted(float(v) for v in malla.extents)
+    if medidas[0] < 0.05:
+        return False          # una cara suelta, sin grosor: no es una pieza
     minimo = float(cfg.min_piece)
     if minimo <= 0:
         return True
-    medidas = sorted(float(v) for v in malla.extents)
     return medidas[1] >= minimo
 
 
@@ -262,7 +264,7 @@ def _separar_islas(base: str,
     se tocan: hay que fabricarlos, nombrarlos y marcarlos por separado.
     """
     if not cfg.split_islands:
-        return [(base, malla, outline)]
+        return [(base, malla, outline)] if _es_util(malla, cfg) else []
     try:
         trozos = malla.split(only_watertight=False)
     except Exception:
@@ -300,8 +302,15 @@ def _recortar_contorno(outline, trozo: trimesh.Trimesh):
     partes = list(outline.geoms) if hasattr(outline, "geoms") else [outline]
     lo, hi = trozo.bounds[0], trozo.bounds[1]
     from shapely.geometry import box as shapely_box
-    caja = shapely_box(lo[0] - 0.01, lo[1] - 0.01, hi[0] + 0.01, hi[1] + 0.01)
-    dentro = [p for p in partes if p.intersects(caja) and caja.contains(p.representative_point())]
+    caja = shapely_box(lo[0] - 0.05, lo[1] - 0.05, hi[0] + 0.05, hi[1] + 0.05)
+    dentro = []
+    for parte in partes:
+        if parte.is_empty or not parte.intersects(caja):
+            continue
+        # se queda con los contornos que estan de verdad en este trozo, no con
+        # los que solo rozan su caja (una pieza en forma de C toca varias)
+        if parte.intersection(caja).area > parte.area * 0.5:
+            dentro.append(parte)
     if not dentro:
         return None
     return merge_polygons(dentro)
