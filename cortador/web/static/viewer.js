@@ -136,6 +136,7 @@ export class Viewer {
     this.distance = 400;
     this.pan = [0, 0, 0];
     this.background = [0.055, 0.063, 0.078];
+    this.lineColor = [0.45, 0.85, 1.0, 1.0];
     this._setupInput();
     this._resize();
     this.render();
@@ -224,8 +225,18 @@ export class Viewer {
   // ---- camara -----------------------------------------------------
   frameAll() {
     this.pan = [0, 0, 0];
-    this.distance = this.radius * 3.1;
+    this.distance = this._fitDistance();
     this.render();
+  }
+
+  _fitDistance() {
+    // distancia a la que la esfera envolvente entra entera, tambien cuando la
+    // ventana es mas ancha que alta y cuando el despiece esta separado
+    const fov = Math.PI / 4;
+    const aspect = Math.max(this.canvas.width / Math.max(this.canvas.height, 1), 0.2);
+    const vertical = this.radius / Math.sin(fov / 2);
+    const horizontal = this.radius / Math.sin(Math.atan(Math.tan(fov / 2) * aspect));
+    return Math.max(vertical, horizontal) * 1.25 * (1 + this.explode * 0.45);
   }
 
   _eye() {
@@ -368,7 +379,8 @@ export class Viewer {
     if (this.lines && this.showGrid) {
       gl.useProgram(this.lineProg);
       gl.uniformMatrix4fv(gl.getUniformLocation(this.lineProg, 'uMVP'), false, mvp);
-      gl.uniform4f(gl.getUniformLocation(this.lineProg, 'uColor'), 0.45, 0.85, 1.0, 1.0);
+      gl.uniform4fv(gl.getUniformLocation(this.lineProg, 'uColor'),
+                    new Float32Array(this.lineColor));
       const la = gl.getAttribLocation(this.lineProg, 'aPos');
       gl.enableVertexAttribArray(la);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.lines.buffer);

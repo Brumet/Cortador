@@ -2,14 +2,23 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cortador - corte de modelos 3D para gran formato</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cortador - by Brumet</title>
+<meta name="description" content="Corta modelos 3D para gran formato: piezas que caben en tu impresora o laminas del espesor que quieras, ya marcadas para armarlas.">
 <link rel="stylesheet" href="/static/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#9986;</text></svg>">
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
 </head>
 <body>
+
 <header class="barra">
-  <div class="marca"><span class="logo">&#9986;</span> Cortador</div>
+  <div class="marca">
+    <img src="/static/logo.svg" alt="Brumet" class="logo">
+    <div class="titulo">
+      <b>Cortador</b>
+      <span>by Brumet</span>
+    </div>
+  </div>
+
   <div class="archivo">
     <label class="boton fichero">
       <input type="file" id="archivo" accept=".stl,.obj,.ply,.off,.3mf,.glb,.gltf,.dae,.zip" hidden>
@@ -17,40 +26,81 @@
     </label>
     <span id="nombre-archivo" class="tenue">ningun modelo cargado</span>
   </div>
+
   <div class="acciones">
+    <a id="btn-guia" class="boton" hidden target="_blank">Guia</a>
+    <a id="btn-descargar" class="boton" hidden download>Descargar todo</a>
+    <button id="btn-abrir" class="boton" hidden>Abrir carpeta</button>
     <button id="btn-cortar" class="boton primario" disabled>Cortar</button>
-    <a id="btn-descargar" class="boton" hidden download>Descargar ZIP</a>
-    <a id="btn-guia" class="boton" hidden target="_blank">Guia de armado</a>
   </div>
 </header>
 
 <main>
+  <!-- ------------------------------------------------ panel de ajustes -->
   <aside class="panel" id="panel">
-    <section>
-      <h2>Maquina</h2>
-      <div class="rejilla3">
-        <label>Ancho X <input type="number" id="px" value="220" min="10" step="1"> <i>mm</i></label>
-        <label>Fondo Y <input type="number" id="py" value="220" min="10" step="1"> <i>mm</i></label>
-        <label>Alto Z <input type="number" id="pz" value="250" min="10" step="1"> <i>mm</i></label>
+
+    <section id="tarjeta-malla" hidden>
+      <h2>Estado de la malla</h2>
+      <div class="estado" id="estado-malla">
+        <span class="punto"></span>
+        <div>
+          <b id="estado-titulo">-</b>
+          <p id="estado-texto" class="tenue"></p>
+        </div>
       </div>
-      <label>Margen de seguridad <input type="number" id="margen" value="0" min="0" step="0.5"> <i>mm por cara</i></label>
-      <div class="chips" id="presets"></div>
+      <div class="botonera">
+        <button class="boton pequeno" id="btn-reparar" hidden>Reparar con 3D Builder</button>
+        <a class="boton pequeno" id="btn-malla" hidden download>Descargar malla reparada</a>
+      </div>
+      <div class="nota" id="nota-reparar" hidden></div>
     </section>
 
     <section>
-      <h2>Modelo</h2>
-      <label>Unidades del archivo
-        <select id="unidades">
-          <option value="mm" selected>milimetros</option>
-          <option value="cm">centimetros</option>
-          <option value="m">metros</option>
-          <option value="in">pulgadas</option>
+      <h2>Tamano final</h2>
+      <label class="grande">
+        Altura del modelo terminado
+        <div class="con-unidad">
+          <input type="number" id="tamano" placeholder="tal cual viene" min="1" step="10">
+          <span>mm</span>
+        </div>
+      </label>
+      <div class="chips" id="alturas"></div>
+      <label>Medida tomada sobre el eje
+        <select id="tamano-eje">
+          <option value="x">X (ancho)</option>
+          <option value="y">Y (fondo)</option>
+          <option value="z" selected>Z (alto)</option>
         </select>
       </label>
-      <label>Escala <input type="number" id="escala" value="1" min="0.001" step="0.1"></label>
-      <label>Tamano final <input type="number" id="tamano" placeholder="(opcional)" min="1" step="1"> <i>mm</i></label>
-      <label>sobre el eje
-        <select id="tamano-eje"><option value="x">X</option><option value="y">Y</option><option value="z" selected>Z (alto)</option></select>
+      <p class="pista" id="pista-escala">El modelo se corta con su tamano original.</p>
+      <details>
+        <summary>Mas opciones del modelo</summary>
+        <label>Unidades del archivo
+          <select id="unidades">
+            <option value="mm" selected>milimetros</option>
+            <option value="cm">centimetros</option>
+            <option value="m">metros</option>
+            <option value="in">pulgadas</option>
+          </select>
+        </label>
+        <label>Escala libre <input type="number" id="escala" value="1" min="0.001" step="0.1"></label>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="unir" checked><i></i></span>
+          Fundir cuerpos superpuestos</label>
+      </details>
+    </section>
+
+    <section>
+      <h2>Maquina</h2>
+      <div class="rejilla3">
+        <label>Ancho X <input type="number" id="px" value="220" min="10" step="1"></label>
+        <label>Fondo Y <input type="number" id="py" value="220" min="10" step="1"></label>
+        <label>Alto Z <input type="number" id="pz" value="250" min="10" step="1"></label>
+      </div>
+      <div class="chips" id="presets"></div>
+      <label>Margen de seguridad
+        <div class="con-unidad">
+          <input type="number" id="margen" value="0" min="0" step="0.5"><span>mm</span>
+        </div>
       </label>
     </section>
 
@@ -60,41 +110,55 @@
         <button class="activo" data-valor="chunks">Trozos</button>
         <button data-valor="slabs">Laminas</button>
       </div>
+
       <div id="opciones-laminas" hidden>
-        <label>Espesor de lamina <input type="number" id="espesor" value="5" min="0.1" step="0.5"> <i>mm</i></label>
+        <label class="grande">Espesor de cada lamina
+          <div class="con-unidad">
+            <input type="number" id="espesor" value="5" min="0.1" step="0.5"><span>mm</span>
+          </div>
+        </label>
         <div class="chips" id="espesores"></div>
         <label>Eje de apilado
-          <select id="eje"><option value="x">X</option><option value="y">Y</option><option value="z" selected>Z</option></select>
+          <select id="eje"><option value="x">X</option><option value="y">Y</option><option value="z" selected>Z (de abajo arriba)</option></select>
         </label>
         <label>Tipo de lamina
           <select id="estilo-lamina">
-            <option value="solid" selected>Solida (conserva el relieve)</option>
-            <option value="prism">Placa plana (contorno extruido, laser/CNC)</option>
+            <option value="solid" selected>Solida - conserva el relieve</option>
+            <option value="prism">Placa plana - laser / CNC (+ SVG y DXF)</option>
           </select>
         </label>
-        <label>Reparto
+        <label>Reparto del espesor
           <select id="ajuste-lamina">
-            <option value="exact" selected>Espesor exacto (la ultima puede ser menor)</option>
+            <option value="exact" selected>Exacto (la ultima puede ser menor)</option>
             <option value="even">Repartido (todas iguales)</option>
           </select>
         </label>
-        <label class="fila"><input type="checkbox" id="subdividir" checked> Partir la lamina si no cabe en la maquina</label>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="subdividir" checked><i></i></span>
+          Partir la lamina si no cabe</label>
       </div>
-      <label>Holgura entre piezas (kerf) <input type="number" id="kerf" value="0" min="0" step="0.1"> <i>mm</i></label>
-      <label>Divisiones forzadas <input type="text" id="divisiones" placeholder="auto  (ej. 3x2x4)"></label>
-      <label class="fila"><input type="checkbox" id="unir" checked> Fundir cuerpos superpuestos antes de cortar</label>
-      <label>Motor de corte
-        <select id="motor">
-          <option value="auto" selected>Automatico</option>
-          <option value="slice">Planos (rapido)</option>
-          <option value="boolean">Booleano (robusto)</option>
-        </select>
+
+      <label>Holgura entre piezas (kerf)
+        <div class="con-unidad">
+          <input type="number" id="kerf" value="0" min="0" step="0.1"><span>mm</span>
+        </div>
       </label>
+      <details>
+        <summary>Avanzado</summary>
+        <label>Divisiones forzadas <input type="text" id="divisiones" placeholder="auto  (ej. 3x2x4)"></label>
+        <label>Motor de corte
+          <select id="motor">
+            <option value="auto" selected>Automatico</option>
+            <option value="slice">Planos (rapido)</option>
+            <option value="boolean">Booleano (robusto)</option>
+          </select>
+        </label>
+      </details>
     </section>
 
     <section>
       <h2>Marcas de armado</h2>
-      <label class="fila"><input type="checkbox" id="marcas" checked> Marcar cada pieza con su nombre</label>
+      <label class="fila"><span class="interruptor"><input type="checkbox" id="marcas" checked><i></i></span>
+        Marcar cada pieza con su nombre</label>
       <div id="opciones-marcas">
         <label>Tipo
           <select id="marca-estilo">
@@ -103,14 +167,14 @@
           </select>
         </label>
         <div class="rejilla3">
-          <label>Letra <input type="number" id="marca-tam" value="8" min="2" step="1"> <i>mm</i></label>
-          <label>Prof. <input type="number" id="marca-prof" value="0.8" min="0.1" step="0.1"> <i>mm</i></label>
-          <label>Trazo <input type="number" id="marca-trazo" value="1.2" min="0.2" step="0.1"> <i>mm</i></label>
+          <label>Letra <input type="number" id="marca-tam" value="8" min="2" step="1"></label>
+          <label>Prof. <input type="number" id="marca-prof" value="0.8" min="0.1" step="0.1"></label>
+          <label>Trazo <input type="number" id="marca-trazo" value="1.2" min="0.2" step="0.1"></label>
         </div>
-        <label>Donde
+        <label>Donde se marca
           <select id="marca-caras">
-            <option value="auto" selected>Una marca por pieza (cara de corte)</option>
-            <option value="cuts">En todas las caras de corte (con la pieza vecina)</option>
+            <option value="auto" selected>Una marca por pieza</option>
+            <option value="cuts">En cada cara de corte (con la vecina)</option>
             <option value="bottom">Siempre en la base</option>
           </select>
         </label>
@@ -128,59 +192,76 @@
         </select>
       </label>
       <div class="rejilla3" id="opciones-espigas" hidden>
-        <label>Radio <input type="number" id="espiga-radio" value="3" min="0.5" step="0.5"> <i>mm</i></label>
-        <label>Prof. <input type="number" id="espiga-prof" value="6" min="1" step="1"> <i>mm</i></label>
+        <label>Radio <input type="number" id="espiga-radio" value="3" min="0.5" step="0.5"></label>
+        <label>Prof. <input type="number" id="espiga-prof" value="6" min="1" step="1"></label>
         <label>Por cara <input type="number" id="espiga-num" value="2" min="1" max="8" step="1"></label>
       </div>
     </section>
 
     <section>
       <h2>Salida</h2>
-      <label class="fila"><input type="checkbox" id="origen" checked>
-        Guardar cada pieza en el origen (lista para el laminador)</label>
       <label>Formato de las piezas
         <select id="formato">
-          <option value="stl" selected>STL</option>
+          <option value="stl" selected>STL - el de cualquier laminador</option>
           <option value="obj">OBJ</option>
           <option value="ply">PLY</option>
           <option value="3mf">3MF</option>
         </select>
       </label>
+      <label class="fila"><span class="interruptor"><input type="checkbox" id="origen" checked><i></i></span>
+        Guardar cada pieza en el origen</label>
+      <p class="pista">Asi cada STL cae centrado en la cama del laminador.</p>
     </section>
+
+    <footer class="pie">Cortador <span id="version"></span> · by <b>Brumet</b> · codigo libre (MIT)</footer>
   </aside>
 
+  <!-- ------------------------------------------------ visor -->
   <section class="lienzo">
     <canvas id="vista"></canvas>
+
     <div class="hud-superior" id="resumen">
       <div class="dato"><b id="r-piezas">-</b><span>piezas</span></div>
       <div class="dato"><b id="r-rejilla">-</b><span>rejilla</span></div>
-      <div class="dato"><b id="r-mayor">-</b><span>pieza mayor (mm)</span></div>
-      <div class="dato"><b id="r-tamano">-</b><span>modelo (mm)</span></div>
+      <div class="dato"><b id="r-mayor">-</b><span>pieza mayor mm</span></div>
+      <div class="dato"><b id="r-tamano">-</b><span>modelo mm</span></div>
     </div>
+
     <div class="hud-inferior">
       <label>Separar <input type="range" id="explosion" min="0" max="150" value="0"></label>
-      <label>Capa <input type="range" id="capa" min="0" max="0" value="0"> <span id="capa-txt">todas</span></label>
-      <label class="fila"><input type="checkbox" id="ver-rejilla" checked> rejilla</label>
+      <label>Capa <input type="range" id="capa" min="0" max="0" value="0"> <span id="capa-txt" class="valor">todas</span></label>
+      <label class="fila"><span class="interruptor pequeno"><input type="checkbox" id="ver-rejilla" checked><i></i></span> rejilla</label>
       <button class="boton pequeno" id="btn-encuadrar">Encuadrar</button>
     </div>
+
     <div class="aviso" id="avisos" hidden></div>
+
     <div class="cargando" id="cargando" hidden>
       <div class="barra-progreso"><div id="progreso"></div></div>
       <span id="progreso-txt">Cortando...</span>
     </div>
+
     <div class="vacio" id="vacio">
-      <h1>Corta modelos 3D para gran formato</h1>
-      <p>Carga una malla (STL, OBJ, PLY, 3MF...), indica el volumen de tu maquina y
-         Cortador la divide en piezas que si caben, o en laminas del espesor que quieras.
-         Cada pieza sale marcada con su nombre para que puedas armarla despues.</p>
-      <p class="tenue">Arrastra aqui el archivo o usa <b>Abrir modelo</b>.</p>
+      <img src="/static/logo.svg" alt="" class="logo-grande">
+      <h1>Corta modelos 3D<br>para gran formato</h1>
+      <p>Carga una malla, dime cuanto mide tu maquina y te la parto en piezas que
+         si caben, o en laminas del espesor que quieras. Cada pieza sale marcada
+         con su nombre para que puedas armarla despues.</p>
+      <label class="boton primario grande fichero">
+        <input type="file" id="archivo2" accept=".stl,.obj,.ply,.off,.3mf,.glb,.gltf,.dae,.zip" hidden>
+        Abrir un modelo
+      </label>
+      <p class="tenue pequeno">o arrastra el archivo aqui &middot; STL, OBJ, PLY, 3MF, GLB</p>
     </div>
   </section>
 
+  <!-- ------------------------------------------------ despiece -->
   <aside class="piezas">
     <h2>Despiece <span id="contador" class="tenue"></span></h2>
-    <input type="search" id="buscar" placeholder="buscar pieza...">
+    <input type="search" id="buscar" placeholder="Buscar pieza">
     <ul id="lista"></ul>
+    <p class="tenue pequeno" id="pista-lista">Aqui apareceran las piezas cuando cortes.
+      Pulsa una para verla en el modelo o descargar solo ese STL.</p>
   </aside>
 </main>
 

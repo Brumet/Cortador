@@ -24,8 +24,9 @@ from fastapi.staticfiles import StaticFiles
 
 from ..config import SliceConfig
 from ..exporters import (assembly_guide, export_result, preview_payload,
-                         zip_directory)
+                         safe_name, zip_directory)
 from ..meshio import MeshError, apply_units_and_scale, load_mesh, mesh_stats
+from ..repair import (auto_repair, diagnose, is_windows, open_in_windows_repair)
 from ..planner import estimate_plan
 from ..slicer import SliceResult, slice_model
 
@@ -39,7 +40,9 @@ class Job:
     id: str
     directory: str
     filename: str = ""
+    source_path: str = ""
     mesh: object = None
+    report: object = None
     result: Optional[SliceResult] = None
     state: str = "vacio"          # vacio | cortando | listo | error
     done: int = 0
@@ -80,6 +83,11 @@ def create_app() -> FastAPI:
         with open(os.path.join(STATIC_DIR, "index.html"), encoding="utf-8") as fh:
             return HTMLResponse(fh.read())
 
+    @app.get("/api/version")
+    def version():
+        from .. import __version__
+        return {"version": __version__, "windows": is_windows()}
+
     @app.post("/api/modelo")
     async def subir_modelo(archivo: UploadFile = File(...)):
         _cleanup_old_jobs()
@@ -96,7 +104,7 @@ def create_app() -> FastAPI:
         with open(path, "wb") as fh:
             fh.write(data)
         try:
-            mesh = load_mesh(path, repair=True)
+            mesh = load_mesh(path, repair=False)
         except MeshError as exc:
             shutil.rmtree(directory, ignore_errors=True)
             raise HTTPException(status_code=400, detail=str(exc))
@@ -104,10 +112,16 @@ def create_app() -> FastAPI:
             shutil.rmtree(directory, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"No se pudo leer el modelo: {exc}")
 
+        problemas = diagnose(mesh)
+        reparada, informe = auto_repair(mesh)
         job = Job(id=job_id, directory=directory, filename=archivo.filename or "modelo",
-                  mesh=mesh)
+                  source_path=path, mesh=reparada, report=informe)
         JOBS[job_id] = job
-        return {"trabajo": job_id, "archivo": job.filename, "modelo": mesh_stats(mesh)}
+        return {"trabajo": job_id, "archivo": job.filename,
+                "modelo": mesh_stats(reparada),
+                "original": {"problemas": problemas},
+                "reparacion": informe.to_dict(),
+                "windows": is_windows()}
 
     @app.post("/api/plan")
     def calcular_plan(payload: dict = Body(...)):
@@ -174,6 +188,57 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Todavia no hay resultado")
         return JSONResponse(job.result.manifest())
 
+    @app.post("/api/reparar/{job_id}")
+    def reparar(job_id: str):
+        """Abre el modelo en 3D Builder (Windows) para usar su reparador."""
+        job = _get_job(job_id)
+        ruta = job.source_path
+        if not ruta or not os.path.exists(ruta):
+            raise HTTPException(status_code=404, detail="El archivo original ya no esta")
+        abierto, mensaje = open_in_windows_repair(ruta)
+        return {"abierto": abierto, "mensaje": mensaje, "windows": is_windows(),
+                "archivo": ruta}
+
+    @app.get("/api/malla/{job_id}")
+    def descargar_malla(job_id: str):
+        """Descarga la malla ya reparada por Cortador, en STL."""
+        job = _get_job(job_id)
+        destino = os.path.join(job.directory, "reparado.stl")
+        if not os.path.exists(destino):
+            job.mesh.export(destino)
+        nombre = os.path.splitext(os.path.basename(job.filename))[0] or "modelo"
+        return FileResponse(destino, media_type="model/stl",
+                            filename=f"{nombre}_reparado.stl")
+
+    @app.get("/api/pieza/{job_id}/{nombre}")
+    def descargar_pieza(job_id: str, nombre: str):
+        """Descarga una sola pieza, para mandarla directa al laminador."""
+        job = _get_job(job_id)
+        if job.result is None:
+            raise HTTPException(status_code=404, detail="Todavia no hay piezas")
+        pieza = next((p for p in job.result.pieces if p.name == nombre), None)
+        if pieza is None:
+            raise HTTPException(status_code=404, detail=f"No existe la pieza {nombre}")
+        carpeta = os.path.join(job.directory, "sueltas")
+        os.makedirs(carpeta, exist_ok=True)
+        destino = os.path.join(carpeta, f"{safe_name(nombre)}.stl")
+        if not os.path.exists(destino):
+            malla = pieza.mesh.copy()
+            malla.apply_translation(-pieza.mesh.bounds[0])
+            malla.export(destino)
+        return FileResponse(destino, media_type="model/stl",
+                            filename=f"{safe_name(nombre)}.stl")
+
+    @app.post("/api/abrir/{job_id}")
+    def abrir_carpeta(job_id: str):
+        """Abre la carpeta con las piezas en el explorador del sistema."""
+        job = _get_job(job_id)
+        carpeta = os.path.join(job.directory, "salida", "piezas")
+        if not os.path.isdir(carpeta):
+            raise HTTPException(status_code=404, detail="Todavia no hay piezas")
+        ok, mensaje = _abrir_en_el_sistema(carpeta)
+        return {"abierto": ok, "mensaje": mensaje, "carpeta": carpeta}
+
     @app.get("/api/descargar/{job_id}")
     def descargar(job_id: str):
         job = _get_job(job_id)
@@ -186,6 +251,22 @@ def create_app() -> FastAPI:
     if os.path.isdir(STATIC_DIR):
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     return app
+
+
+def _abrir_en_el_sistema(carpeta: str):
+    """Abre una carpeta con el explorador de archivos del sistema."""
+    import subprocess
+    import sys
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(carpeta)       # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", carpeta])
+        else:
+            subprocess.Popen(["xdg-open", carpeta])
+        return True, "Carpeta abierta"
+    except Exception as exc:
+        return False, f"No he podido abrir la carpeta ({exc}). Esta en: {carpeta}"
 
 
 def _config_from(data) -> SliceConfig:
@@ -263,9 +344,25 @@ def _original_payload(job: Job) -> bytes:
     return struct.pack("<I", len(raw)) + raw + np.ascontiguousarray(tris).tobytes()
 
 
+def free_port(host: str, port: int, intentos: int = 20) -> int:
+    """Busca un puerto libre a partir del pedido (util al abrir dos veces la app)."""
+    import socket
+    for salto in range(intentos):
+        candidato = port + salto
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, candidato))
+                return candidato
+            except OSError:
+                continue
+    return port
+
+
 def run(host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) -> None:
     import uvicorn
 
+    port = free_port(host, port)
     url = f"http://{host}:{port}/"
     if open_browser:
         def _open() -> None:

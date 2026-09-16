@@ -13,6 +13,8 @@ from .config import (JoineryOptions, LabelOptions, PrinterSpec, SliceConfig,
 from .exporters import export_result, zip_directory
 from .meshio import INPUT_FORMATS, load_mesh, mesh_stats
 from .planner import estimate_plan
+from .repair import (auto_repair, diagnose, is_windows,
+                     open_in_windows_repair, repaired_copy_path)
 from .slicer import slice_model
 
 STYLE_MAP = {"grabado": "engrave", "relieve": "emboss",
@@ -180,7 +182,8 @@ class _Bar:
 
 
 def cmd_info(args) -> int:
-    mesh = load_mesh(args.modelo, repair=not args.sin_reparar)
+    # sin reparar: aqui queremos ver el archivo tal y como esta
+    mesh = load_mesh(args.modelo, repair=False)
     stats = mesh_stats(mesh)
     print(f"Archivo      : {args.modelo}")
     print(f"Triangulos   : {stats['triangles']:,}".replace(",", "."))
@@ -189,6 +192,16 @@ def cmd_info(args) -> int:
     print(f"Cuerpos      : {stats['bodies']}")
     if stats["volume"]:
         print(f"Volumen      : {stats['volume'] / 1000.0:.1f} cm3")
+    problemas = diagnose(mesh)
+    if problemas:
+        print("Problemas    :")
+        for p in problemas:
+            print(f"  - {p}")
+        _reparada, informe = auto_repair(mesh)
+        print(f"Si se repara : {informe.resumen()}")
+        print(f"Hazlo con    : cortador reparar \"{args.modelo}\"")
+    else:
+        print("Problemas    : ninguno, lista para cortar")
     return 0
 
 
@@ -215,6 +228,9 @@ def cmd_cut(args) -> int:
     bar = _Bar(not args.silencioso)
     print(f"Cargando {args.modelo} ...")
     mesh = load_mesh(args.modelo, repair=True)
+    mesh, informe = auto_repair(mesh, weld=not args.no_unir)
+    if informe.cambiada or informe.problemas:
+        print(informe.resumen())
     start = time.time()
     result = slice_model(mesh, cfg, progress=bar)
     model_name = os.path.splitext(os.path.basename(args.modelo))[0]
@@ -234,6 +250,38 @@ def cmd_cut(args) -> int:
         print(f"Espigas      : {result.dowels}")
     for warn in result.warnings:
         print(f"  aviso: {warn}")
+    return 0
+
+
+def cmd_repair(args) -> int:
+    if args.windows:
+        abierto, mensaje = open_in_windows_repair(args.modelo)
+        print(mensaje)
+        return 0 if abierto else 1
+
+    mesh = load_mesh(args.modelo, repair=False)
+    antes = diagnose(mesh)
+    if antes:
+        print("Problemas encontrados:")
+        for p in antes:
+            print(f"  - {p}")
+    else:
+        print("La malla no tiene problemas evidentes.")
+
+    reparada, informe = auto_repair(mesh, weld=not args.no_unir)
+    print(informe.resumen())
+
+    destino = args.salida or repaired_copy_path(args.modelo)
+    reparada.export(destino)
+    print(f"Guardado     : {destino}")
+    if not informe.estanca_despues:
+        if is_windows():
+            print("Sigue abierta. Prueba con:  cortador reparar "
+                  f"\"{args.modelo}\" --windows")
+        else:
+            print("Sigue abierta. Abrela con Meshlab, Blender o 3D Builder (Windows) "
+                  "y usa su reparador.")
+        return 2
     return 0
 
 
@@ -287,8 +335,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_info = sub.add_parser("info", help="informacion del modelo")
     p_info.add_argument("modelo")
-    p_info.add_argument("--sin-reparar", action="store_true")
     p_info.set_defaults(func=cmd_info)
+
+    p_rep = sub.add_parser("reparar", help="reparar la malla antes de cortar")
+    p_rep.add_argument("modelo")
+    p_rep.add_argument("-o", "--salida", default=None,
+                       help="archivo reparado (por defecto  <modelo>_reparado.stl)")
+    p_rep.add_argument("--no-unir", action="store_true",
+                       help="no fundir los cuerpos superpuestos")
+    p_rep.add_argument("--windows", action="store_true",
+                       help="abrir el modelo en 3D Builder de Windows para repararlo a mano")
+    p_rep.set_defaults(func=cmd_repair)
 
     p_web = sub.add_parser("web", help="abrir la interfaz grafica en el navegador")
     p_web.add_argument("--puerto", type=int, default=8000)

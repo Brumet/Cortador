@@ -100,3 +100,62 @@ def test_descarga_antes_de_cortar(cliente, stl_bytes):
     trabajo = _subir(cliente, stl_bytes)
     assert cliente.get(f"/api/descargar/{trabajo}").status_code == 404
     assert cliente.get(f"/api/guia/{trabajo}").status_code == 404
+
+
+def test_version(cliente):
+    datos = cliente.get("/api/version").json()
+    assert datos["version"]
+    assert "windows" in datos
+
+
+def test_informe_de_reparacion_al_subir(cliente):
+    import numpy as np
+    m = trimesh.creation.box(extents=[50.0, 50.0, 50.0])
+    mask = np.ones(len(m.faces), bool)
+    mask[0] = False
+    m.update_faces(mask)
+    res = cliente.post("/api/modelo",
+                       files={"archivo": ("rota.stl", io.BytesIO(m.export(file_type="stl")),
+                                          "model/stl")})
+    datos = res.json()
+    assert "reparacion" in datos and "resumen" in datos["reparacion"]
+    assert datos["original"]["problemas"]
+    assert datos["modelo"]["watertight"] is True      # se repara al vuelo
+
+
+def test_descargar_malla_reparada(cliente, stl_bytes):
+    trabajo = _subir(cliente, stl_bytes)
+    res = cliente.get(f"/api/malla/{trabajo}")
+    assert res.status_code == 200
+    assert b"solid" in res.content[:200].lower() or len(res.content) > 84
+
+
+def test_reparar_fuera_de_windows(cliente, stl_bytes):
+    trabajo = _subir(cliente, stl_bytes)
+    datos = cliente.post(f"/api/reparar/{trabajo}").json()
+    assert "mensaje" in datos
+    assert datos["abierto"] is datos["windows"] or datos["abierto"] is False
+
+
+def test_descargar_una_pieza(cliente, stl_bytes):
+    trabajo = _subir(cliente, stl_bytes)
+    assert cliente.get(f"/api/pieza/{trabajo}/A-L01").status_code == 404
+    cliente.post("/api/cortar", json={
+        "trabajo": trabajo,
+        "config": {"printer": {"x": 100, "y": 100, "z": 100},
+                   "labels": {"enabled": False}}})
+    for _ in range(120):
+        estado = cliente.get(f"/api/progreso/{trabajo}").json()
+        if estado["estado"] in ("listo", "error"):
+            break
+        time.sleep(0.25)
+    assert estado["estado"] == "listo"
+    nombre = estado["resumen"]["lista"][0]["nombre"]
+    res = cliente.get(f"/api/pieza/{trabajo}/{nombre}")
+    assert res.status_code == 200 and len(res.content) > 84
+    assert cliente.get(f"/api/pieza/{trabajo}/NO-EXISTE").status_code == 404
+
+
+def test_abrir_carpeta_antes_de_cortar(cliente, stl_bytes):
+    trabajo = _subir(cliente, stl_bytes)
+    assert cliente.post(f"/api/abrir/{trabajo}").status_code == 404

@@ -90,3 +90,37 @@ def test_ayuda():
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["--help"])
+
+
+def test_reparar(tmp_path, capsys):
+    import numpy as np
+    m = trimesh.creation.box(extents=[50.0, 50.0, 50.0])
+    mask = np.ones(len(m.faces), bool)
+    mask[0] = False
+    m.update_faces(mask)
+    ruta = str(tmp_path / "rota.stl")
+    m.export(ruta)
+
+    destino = str(tmp_path / "arreglada.stl")
+    assert main(["reparar", ruta, "-o", destino]) == 0
+    salida = capsys.readouterr().out
+    assert "Problemas encontrados" in salida
+    assert trimesh.load(destino).is_watertight
+
+
+def test_reparar_windows_fuera_de_windows(tmp_path, capsys, modelo):
+    from cortador.repair import is_windows
+    codigo = main(["reparar", modelo, "--windows"])
+    assert codigo == (0 if is_windows() else 1)
+
+
+def test_info_avisa_de_mallas_rotas(tmp_path, capsys):
+    import numpy as np
+    m = trimesh.creation.box(extents=[10.0, 10.0, 10.0])
+    mask = np.ones(len(m.faces), bool)
+    mask[0] = False
+    m.update_faces(mask)
+    ruta = str(tmp_path / "rota.stl")
+    m.export(ruta)
+    main(["info", ruta])
+    assert "Problemas" in capsys.readouterr().out

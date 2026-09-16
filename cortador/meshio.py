@@ -108,8 +108,22 @@ def weld_bodies(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         return mesh
     if len(parts) < 2:
         return mesh
+    # el motor CSG exige cuerpos cerrados: tapamos cada trozo antes de unir
+    limpias = []
+    for part in parts:
+        if not part.is_watertight:
+            part = part.copy()
+            try:
+                part.fill_holes()
+                part.fix_normals()
+            except Exception:
+                pass
+        if part.is_watertight and len(part.faces):
+            limpias.append(part)
+    if len(limpias) < 2:
+        return mesh
     try:
-        welded = trimesh.boolean.union(list(parts))
+        welded = trimesh.boolean.union(limpias)
     except Exception:
         return mesh
     if isinstance(welded, list):

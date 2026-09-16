@@ -1,4 +1,4 @@
-/* Logica del panel: formulario -> API -> visor 3D. */
+/* Cortador - by Brumet.  Logica del panel: formulario -> API -> visor 3D. */
 import { Viewer } from '/static/viewer.js';
 
 const $ = (id) => document.getElementById(id);
@@ -8,24 +8,51 @@ const estado = {
   plan: null,
   resumen: null,
   fuente: 'original',   // que se esta viendo: original | piezas
+  windows: false,
 };
 
 let visor = null;
 try {
   visor = new Viewer($('vista'));
+  aplicarTema();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', aplicarTema);
 } catch (err) {
   $('vacio').innerHTML = `<h1>WebGL no disponible</h1><p>${err.message}</p>
-    <p class="tenue">Puedes seguir usando Cortador desde la terminal: <code>cortador cortar modelo.stl</code></p>`;
+    <p class="tenue">Puedes seguir usando Cortador desde la terminal:
+    <code>cortador cortar modelo.stl</code></p>`;
+}
+
+function aplicarTema() {
+  if (!visor) return;
+  const css = getComputedStyle(document.body).getPropertyValue('--lienzo').trim();
+  const m = css.match(/^#([0-9a-f]{6})$/i);
+  if (m) {
+    const n = parseInt(m[1], 16);
+    visor.background = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+      .map((c) => Math.pow(c, 2.2));
+  }
+  const oscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  visor.lineColor = oscuro ? [0.35, 0.62, 0.95, 1] : [0.0, 0.44, 0.89, 0.75];
+  visor.render();
 }
 
 // ------------------------------------------------------------ utilidades
+function num(id, def) {
+  const v = parseFloat($(id).value);
+  return Number.isFinite(v) ? v : def;
+}
+
+function modoActual() {
+  return $('modo').querySelector('.activo').dataset.valor;
+}
+
 function leerConfig() {
   const divisiones = $('divisiones').value.trim();
   let div = null;
   if (divisiones) {
     const partes = divisiones.toLowerCase().replace(/\*/g, 'x').split('x');
     if (partes.length === 3) {
-      div = partes.map((p) => (p.trim() === '' || p.trim() === '-' || p.trim() === 'auto'
+      div = partes.map((p) => (['', '-', 'auto'].includes(p.trim())
         ? null : Math.max(1, parseInt(p, 10) || 1)));
     }
   }
@@ -67,26 +94,19 @@ function leerConfig() {
   };
 }
 
-function num(id, def) {
-  const v = parseFloat($(id).value);
-  return Number.isFinite(v) ? v : def;
-}
-
-function modoActual() {
-  return $('modo').querySelector('.activo').dataset.valor;
+function escapar(t) {
+  return String(t).replace(/[<>&"]/g, (c) => (
+    { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 }
 
 function mostrarAvisos(lista, esError) {
   const caja = $('avisos');
-  if (!lista || !lista.length) { caja.hidden = true; return; }
+  lista = (lista || []).filter(Boolean);
+  if (!lista.length) { caja.hidden = true; return; }
   caja.hidden = false;
   caja.className = 'aviso' + (esError ? ' error' : '');
   caja.innerHTML = `<b>${esError ? 'Error' : 'Avisos'}</b><ul>${
     lista.map((t) => `<li>${escapar(t)}</li>`).join('')}</ul>`;
-}
-
-function escapar(t) {
-  return String(t).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 }
 
 async function api(url, opciones) {
@@ -110,14 +130,19 @@ async function cargarArchivo(file) {
     const info = await res.json();
     estado.trabajo = info.trabajo;
     estado.fuente = 'original';
-    $('nombre-archivo').textContent = `${info.archivo} - ${info.modelo.triangles.toLocaleString('es')} triangulos`;
+    estado.windows = !!info.windows;
+    $('nombre-archivo').textContent =
+      `${info.archivo} · ${info.modelo.triangles.toLocaleString('es')} triangulos`;
     $('btn-cortar').disabled = false;
     $('btn-descargar').hidden = true;
     $('btn-guia').hidden = true;
+    $('btn-abrir').hidden = true;
     $('vacio').hidden = true;
-    mostrarAvisos(info.modelo.watertight ? [] : [
-      'La malla no es estanca (tiene agujeros). Cortador intentara repararla, '
-      + 'pero si el resultado sale raro conviene arreglarla antes.'], false);
+    $('pista-lista').hidden = false;
+    $('lista').innerHTML = '';
+    $('contador').textContent = '';
+    pintarEstadoMalla(info);
+    mostrarAvisos([]);
     await verOriginal();
     actualizarPlan();
   } catch (err) {
@@ -126,10 +151,48 @@ async function cargarArchivo(file) {
   }
 }
 
+function pintarEstadoMalla(info) {
+  const rep = info.reparacion || {};
+  const tarjeta = $('tarjeta-malla');
+  const bloque = $('estado-malla');
+  tarjeta.hidden = false;
+  $('nota-reparar').hidden = true;
+  $('btn-malla').hidden = !rep.cambiada;
+  $('btn-malla').href = `/api/malla/${estado.trabajo}`;
+
+  if (rep.ok) {
+    bloque.classList.remove('mal');
+    $('estado-titulo').textContent = rep.cambiada ? 'Reparada y lista' : 'Malla correcta';
+    $('estado-texto').textContent = rep.resumen || '';
+    $('btn-reparar').hidden = true;
+  } else {
+    bloque.classList.add('mal');
+    $('estado-titulo').textContent = 'La malla tiene fallos';
+    $('estado-texto').textContent = (rep.resumen || '')
+      + ' ' + ((rep.problemas || []).join('; '));
+    $('btn-reparar').hidden = false;
+    $('btn-reparar').textContent = estado.windows
+      ? 'Reparar con 3D Builder' : 'Como reparar la malla';
+  }
+}
+
+async function repararEnWindows() {
+  if (!estado.trabajo) return;
+  $('btn-reparar').disabled = true;
+  try {
+    const info = await (await api(`/api/reparar/${estado.trabajo}`, { method: 'POST' })).json();
+    const nota = $('nota-reparar');
+    nota.hidden = false;
+    nota.textContent = info.mensaje;
+  } catch (err) {
+    mostrarAvisos([err.message], true);
+  }
+  $('btn-reparar').disabled = false;
+}
+
 async function verOriginal() {
   const res = await api(`/api/vista/${estado.trabajo}?fuente=original`);
-  const buffer = await res.arrayBuffer();
-  visor.setPayload(buffer);
+  visor.setPayload(await res.arrayBuffer());
   visor.frameAll();
   estado.fuente = 'original';
   pintarRejilla();
@@ -137,7 +200,7 @@ async function verOriginal() {
   visor.render();
 }
 
-// ------------------------------------------------------------ plan
+// ------------------------------------------------------------ plan en vivo
 let temporizador = null;
 function actualizarPlan() {
   if (!estado.trabajo) return;
@@ -158,6 +221,7 @@ function actualizarPlan() {
       $('r-tamano').textContent = plan.modelo.size.map((v) => v.toFixed(0)).join(' x ');
       if (estado.fuente === 'original') $('r-piezas').textContent = '~' + plan.total_cells;
       $('capa').max = Math.max(0, plan.layers);
+      pintarPistaEscala(plan);
       mostrarAvisos(plan.warnings, false);
       pintarRejilla();
     } catch (err) {
@@ -166,11 +230,20 @@ function actualizarPlan() {
   }, 180);
 }
 
+function pintarPistaEscala(plan) {
+  const f = plan.factor || 1;
+  const s = plan.modelo.size;
+  const texto = Math.abs(f - 1) < 1e-6
+    ? `Tamano original: ${s[0].toFixed(0)} x ${s[1].toFixed(0)} x ${s[2].toFixed(0)} mm.`
+    : `Escala x${f.toFixed(3)} → ${s[0].toFixed(0)} x ${s[1].toFixed(0)} x ${s[2].toFixed(0)} mm `
+      + `(${(s[2] / 1000).toFixed(2)} m de alto).`;
+  $('pista-escala').textContent = texto;
+}
+
 function pintarRejilla() {
   if (!visor || !estado.plan) return;
   const f = estado.fuente === 'original' ? (estado.factor || 1) : 1;
-  const bordes = estado.plan.edges.map((eje) => eje.map((v) => v / f));
-  visor.setGrid(bordes);
+  visor.setGrid(estado.plan.edges.map((eje) => eje.map((v) => v / f)));
   visor.render();
 }
 
@@ -193,8 +266,8 @@ async function cortar() {
   } catch (err) {
     mostrarAvisos([err.message], true);
     $('cargando').hidden = true;
-    $('btn-cortar').disabled = false;
   }
+  $('btn-cortar').disabled = false;
 }
 
 async function seguirProgreso() {
@@ -221,7 +294,6 @@ async function seguirProgreso() {
     }
   }
   $('cargando').hidden = true;
-  $('btn-cortar').disabled = false;
 }
 
 async function verPiezas() {
@@ -238,6 +310,7 @@ async function verPiezas() {
   $('btn-descargar').href = `/api/descargar/${estado.trabajo}`;
   $('btn-guia').hidden = false;
   $('btn-guia').href = `/api/guia/${estado.trabajo}`;
+  $('btn-abrir').hidden = false;
   const avisos = resumen.avisos.slice();
   if (resumen.fuera_de_capacidad.length) {
     avisos.push('No caben en la maquina: ' + resumen.fuera_de_capacidad.join(', '));
@@ -260,15 +333,20 @@ function pintarLista() {
     visibles++;
     const li = document.createElement('li');
     li.dataset.nombre = p.nombre;
-    const color = colorPieza(i);
-    li.innerHTML = `<span class="color" style="background:${color}"></span>
+    li.innerHTML = `<span class="color" style="background:${colorPieza(i)}"></span>
       <span class="nombre">${escapar(p.nombre)}</span>
-      ${p.avisos.length ? '<span class="marca-aviso" title="' + escapar(p.avisos.join('; ')) + '">!</span>' : ''}
-      <span class="medidas">${p.medidas.map((v) => v.toFixed(0)).join('x')}</span>`;
-    li.onclick = () => seleccionar(p.nombre);
+      ${p.avisos.length ? `<span class="marca-aviso" title="${escapar(p.avisos.join('; '))}">!</span>` : ''}
+      <span class="medidas">${p.medidas.map((v) => v.toFixed(0)).join('&times;')}</span>
+      <a class="bajar" title="Descargar solo esta pieza en STL" download
+         href="/api/pieza/${estado.trabajo}/${encodeURIComponent(p.nombre)}">&#8595;</a>`;
+    li.onclick = (ev) => {
+      if (ev.target.classList.contains('bajar')) { ev.stopPropagation(); return; }
+      seleccionar(p.nombre);
+    };
     lista.appendChild(li);
   });
-  $('contador').textContent = visibles ? `${visibles} pieza(s)` : '';
+  $('contador').textContent = visibles ? `${visibles}` : '';
+  $('pista-lista').hidden = visibles > 0;
 }
 
 function colorPieza(i) {
@@ -277,8 +355,7 @@ function colorPieza(i) {
   const v = Math.min(0.75 + 0.2 * (i % 2), 1);
   const f = (n) => {
     const k = (n + h * 6) % 6;
-    const c = v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
-    return Math.round(c * 255);
+    return Math.round((v - v * s * Math.max(Math.min(k, 4 - k, 1), 0)) * 255);
   };
   return `rgb(${f(5)},${f(3)},${f(1)})`;
 }
@@ -295,16 +372,24 @@ function seleccionar(nombre) {
       const vecinos = Object.entries(p.vecinos || {}).map(([k, v]) => `${v} (${k})`).join(', ');
       mostrarAvisos([`${p.nombre}: ${p.medidas.join(' x ')} mm`
         + (p.volumen_cm3 ? `, ${p.volumen_cm3} cm3` : '')
-        + (vecinos ? ` - encaja con ${vecinos}` : '')].concat(p.avisos), false);
+        + (vecinos ? ` · encaja con ${vecinos}` : '')].concat(p.avisos), false);
     }
   }
 }
 
 // ------------------------------------------------------------ eventos
 $('archivo').addEventListener('change', (e) => cargarArchivo(e.target.files[0]));
+$('archivo2').addEventListener('change', (e) => cargarArchivo(e.target.files[0]));
 $('btn-cortar').addEventListener('click', cortar);
+$('btn-reparar').addEventListener('click', repararEnWindows);
 $('btn-encuadrar').addEventListener('click', () => visor && visor.frameAll());
 $('buscar').addEventListener('input', pintarLista);
+$('btn-abrir').addEventListener('click', async () => {
+  try {
+    const info = await (await api(`/api/abrir/${estado.trabajo}`, { method: 'POST' })).json();
+    if (!info.abierto) mostrarAvisos([info.mensaje], false);
+  } catch (err) { mostrarAvisos([err.message], true); }
+});
 
 $('modo').querySelectorAll('button').forEach((b) => {
   b.addEventListener('click', () => {
@@ -314,14 +399,12 @@ $('modo').querySelectorAll('button').forEach((b) => {
     actualizarPlan();
   });
 });
-
 $('espigas').addEventListener('change', () => {
   $('opciones-espigas').hidden = $('espigas').value === 'none';
 });
 $('marcas').addEventListener('change', () => {
   $('opciones-marcas').hidden = !$('marcas').checked;
 });
-
 $('explosion').addEventListener('input', (e) => {
   if (!visor) return;
   visor.explode = parseFloat(e.target.value) / 100;
@@ -345,9 +428,7 @@ $('ver-rejilla').addEventListener('change', (e) => {
  'subdividir', 'kerf', 'divisiones', 'escala', 'tamano', 'tamano-eje', 'unidades',
  'motor', 'unir'].forEach((id) => {
   $(id).addEventListener('change', actualizarPlan);
-  if ($(id).type === 'number' || $(id).type === 'text') {
-    $(id).addEventListener('input', actualizarPlan);
-  }
+  if (['number', 'text'].includes($(id).type)) $(id).addEventListener('input', actualizarPlan);
 });
 
 if (visor) {
@@ -357,24 +438,36 @@ if (visor) {
   };
 }
 
-// atajos rapidos de maquina y espesor
-const MAQUINAS = [
-  ['Ender 3', 220, 220, 250], ['Bambu X1', 256, 256, 256],
-  ['Prusa MK4', 250, 210, 220], ['Neptune 4 Max', 420, 420, 480],
-  ['Modix 180X', 1800, 600, 600],
-];
-MAQUINAS.forEach(([nombre, x, y, z]) => {
-  const b = document.createElement('button');
-  b.textContent = nombre;
-  b.onclick = () => { $('px').value = x; $('py').value = y; $('pz').value = z; actualizarPlan(); };
-  $('presets').appendChild(b);
-});
-[3, 5, 10, 18, 25].forEach((mm) => {
-  const b = document.createElement('button');
-  b.textContent = mm + ' mm';
-  b.onclick = () => { $('espesor').value = mm; actualizarPlan(); };
-  $('espesores').appendChild(b);
-});
+// atajos: maquinas, alturas y espesores habituales
+function chips(contenedor, items, accion) {
+  items.forEach((item) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = item.texto;
+    b.onclick = () => { accion(item); actualizarPlan(); };
+    $(contenedor).appendChild(b);
+  });
+}
+
+chips('presets', [
+  { texto: 'Ender 3', v: [220, 220, 250] },
+  { texto: 'Bambu X1', v: [256, 256, 256] },
+  { texto: 'Prusa MK4', v: [250, 210, 220] },
+  { texto: 'Flsun V400', v: [300, 300, 410] },
+  { texto: 'Neptune 4 Max', v: [420, 420, 480] },
+  { texto: 'Modix 180X', v: [1800, 600, 600] },
+], (i) => { $('px').value = i.v[0]; $('py').value = i.v[1]; $('pz').value = i.v[2]; });
+
+chips('alturas', [
+  { texto: '30 cm', v: 300 }, { texto: '50 cm', v: 500 }, { texto: '1 m', v: 1000 },
+  { texto: '1,5 m', v: 1500 }, { texto: '1,8 m', v: 1800 }, { texto: '2 m', v: 2000 },
+  { texto: 'original', v: '' },
+], (i) => { $('tamano').value = i.v; });
+
+chips('espesores', [
+  { texto: '3 mm', v: 3 }, { texto: '5 mm', v: 5 }, { texto: '10 mm', v: 10 },
+  { texto: '15 mm', v: 15 }, { texto: '18 mm', v: 18 }, { texto: '25 mm', v: 25 },
+], (i) => { $('espesor').value = i.v; });
 
 // arrastrar y soltar
 const lienzo = document.querySelector('.lienzo');
@@ -385,3 +478,7 @@ const lienzo = document.querySelector('.lienzo');
   e.preventDefault(); lienzo.classList.remove('arrastrando');
 }));
 lienzo.addEventListener('drop', (e) => cargarArchivo(e.dataTransfer.files[0]));
+
+fetch('/api/version').then((r) => r.json())
+  .then((d) => { $('version').textContent = 'v' + d.version; })
+  .catch(() => { /* sin version, da igual */ });
