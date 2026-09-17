@@ -89,3 +89,14 @@ def test_3d_builder_solo_en_windows():
 def test_archivo_que_no_existe():
     abierto, mensaje = open_in_windows_repair("/no/existe.stl")
     assert abierto is False and "encuentro" in mensaje
+
+
+def test_reparar_dos_veces_no_estropea_la_malla(figura):
+    """Una malla ya sana no se vuelve a tocar: repararla otra vez la rompia."""
+    primera, informe1 = auto_repair(figura)
+    assert primera.is_watertight
+    segunda, informe2 = auto_repair(primera)
+    assert segunda is primera            # no se toca
+    assert not informe2.cambiada
+    assert segunda.is_watertight
+    assert len(segunda.faces) == len(primera.faces)

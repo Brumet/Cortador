@@ -388,6 +388,16 @@ async function verPiezas() {
   const resumen = estado.resumen;
   $('r-piezas').textContent = resumen.piezas;
   $('r-rejilla').textContent = resumen.rejilla.join('x');
+  if (resumen.litros) {
+    $('dato-material').hidden = false;
+    const ahorro = resumen.litros_macizo
+      ? Math.round(100 * (1 - resumen.litros / resumen.litros_macizo)) : 0;
+    $('r-material').textContent = resumen.litros.toFixed(1) + ' L';
+    $('dato-material').title = ahorro > 0
+      ? `${ahorro} % menos que macizo (${resumen.litros_macizo.toFixed(1)} L)` : '';
+    $('dato-material').querySelector('span').textContent =
+      ahorro > 0 ? `material · ${ahorro}% menos` : 'material';
+  }
   $('capa').max = resumen.capas;
   $('btn-descargar').hidden = false;
   $('btn-descargar').href = `/api/descargar/${estado.trabajo}`;

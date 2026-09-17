@@ -309,6 +309,8 @@ def _summary(job: Job) -> dict:
         "rejilla": list(result.plan.counts),
         "capas": int(result.plan.counts[result.plan.layer_axis]),
         "espigas": result.dowels,
+        "litros": round(result.hollow_volume / 1e6, 2),
+        "litros_macizo": round(result.solid_volume / 1e6, 2),
         "avisos": list(result.warnings),
         "fuera_de_capacidad": [p.name for p in result.oversized()],
         "lista": [{"nombre": p.name, "capa": p.layer,

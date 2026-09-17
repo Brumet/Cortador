@@ -192,6 +192,8 @@ fallan 11 de 308.
   milimetro. Cortador las limpia (`--pieza-minima`, 5 mm por defecto).
 - Los trozos sueltos de una misma celda se separan en piezas con nombre propio
   (`A2-L06a`, `A2-L06b`), cada una con su archivo y su marca.
+- En un pico o un pliegue muy cerrado los vertices se cruzarian y apareceria una
+  pua atravesando la pared: ahi se afina el espesor en vez de cruzarlos.
 
 ### Rebanadas apiladas (otra cosa distinta)
 
@@ -403,7 +405,7 @@ export_result(resultado, "salida/", mesh_format="stl")
 
 ```bash
 pip install -e ".[web,dev]"
-pytest -q                                   # 165 pruebas
+pytest -q                                   # 169 pruebas
 python examples/gorila_demo.py gorila.stl   # gorila de prueba de 1,8 m
 python examples/desde_capas.py modelo.json modelo.stl   # capas -> STL
 python examples/figura_demo.py figura.stl   # figura simple de prueba

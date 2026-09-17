@@ -150,21 +150,9 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         return mesh, (f"La pared de {wall:g} mm no cabe en un modelo de "
                       f"{grosor_minimo:.1f} mm de grueso: se deja macizo.")
 
-    interior = mesh.copy()
-    try:
-        normales = interior.vertex_normals
-    except Exception:
+    interior = _superficie_interior(mesh, wall)
+    if interior is None:
         return mesh, "No se han podido calcular las normales para vaciar el modelo."
-    interior.vertices = interior.vertices - normales * wall
-    # el desplazamiento puede dar la vuelta a caras en las zonas muy concavas
-    interior.update_faces(interior.nondegenerate_faces())
-    interior.remove_unreferenced_vertices()
-    if not interior.is_volume:
-        try:
-            interior.fill_holes()
-            interior.fix_normals()
-        except Exception:
-            pass
 
     cascara = boolean_op("difference", mesh, interior)
     if cascara is None or not cascara.is_volume:
@@ -208,6 +196,48 @@ def hollow_region(region, wall: float, tab_size=None, minimo: float = 5.0):
     if not partes:
         return None
     return unary_union(partes)
+
+
+def _superficie_interior(mesh: trimesh.Trimesh,
+                        wall: float,
+                        intentos: int = 6) -> Optional[trimesh.Trimesh]:
+    """La superficie del modelo desplazada `wall` mm hacia dentro.
+
+    Desplazar todos los vertices lo mismo funciona en las zonas planas, pero en
+    un pico o en un pliegue cerrado los vertices se cruzan y aparecen esas
+    puas que atraviesan la pared. Aqui se detectan las caras que se dan la
+    vuelta al desplazarlas y se reduce el avance **solo** en sus vertices: la
+    pared queda algo mas fina en esos puntos, que es justo lo que hace falta.
+    """
+    try:
+        normales = np.asarray(mesh.vertex_normals, dtype=float)
+    except Exception:
+        return None
+    if len(normales) != len(mesh.vertices):
+        return None
+
+    originales = np.asarray(mesh.face_normals, dtype=float)
+    avance = np.full(len(mesh.vertices), float(wall))
+    interior = mesh.copy()
+    for _ in range(intentos):
+        interior.vertices = mesh.vertices - normales * avance[:, None]
+        nuevas = np.asarray(interior.face_normals, dtype=float)
+        if len(nuevas) != len(originales):
+            break
+        vueltas = np.einsum("ij,ij->i", nuevas, originales) < 0.0
+        if not vueltas.any():
+            break
+        avance[np.unique(mesh.faces[vueltas])] *= 0.5
+
+    interior.update_faces(interior.nondegenerate_faces())
+    interior.remove_unreferenced_vertices()
+    if not interior.is_volume:
+        try:
+            interior.fill_holes()
+            interior.fix_normals()
+        except Exception:
+            pass
+    return interior
 
 
 def savings(original: float, hueco: float) -> str:

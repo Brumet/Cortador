@@ -305,3 +305,34 @@ def test_se_descartan_las_rebabas_finas():
     res = slice_model(esfera, cfg)
     for pieza in res.pieces:
         assert min(float(v) for v in pieza.size) >= 0.8, f"{pieza.name}: {pieza.size}"
+
+
+def test_el_solidificado_no_se_sale_del_modelo():
+    """La piel siempre queda dentro de la superficie original, sin puas."""
+    import trimesh
+    from cortador.hollow import hollow_mesh
+
+    erizo = trimesh.creation.icosphere(subdivisions=3, radius=60)
+    erizo.vertices[np.arange(0, len(erizo.vertices), 7)] *= 1.6   # pliegues cerrados
+    erizo.fix_normals()
+
+    piel, aviso = hollow_mesh(erizo, 3.0)
+    assert aviso is None and piel is not erizo
+    fuera = trimesh.boolean.difference([piel, erizo])
+    volumen_fuera = abs(float(fuera.volume)) if fuera is not None and len(fuera.faces) else 0.0
+    assert volumen_fuera < piel.volume * 1e-3
+    assert piel.volume < erizo.volume
+
+
+def test_la_pared_se_afina_donde_no_cabe():
+    """En un pliegue cerrado se reduce el avance en vez de cruzar los vertices."""
+    import trimesh
+    from cortador.hollow import _superficie_interior
+
+    cuna = trimesh.creation.icosphere(subdivisions=3, radius=30)
+    cuna.vertices[:, 0] *= 0.08          # casi plana: 2.4 mm de grueso
+    cuna.fix_normals()
+    interior = _superficie_interior(cuna, 3.0)
+    assert interior is not None
+    # sin limitar, el interior daria la vuelta y seria mas grande que el original
+    assert interior.extents[0] <= cuna.extents[0] + 1e-6

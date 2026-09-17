@@ -135,6 +135,15 @@ def auto_repair(mesh: trimesh.Trimesh,
         cuerpos_antes=body_count(mesh),
         estanca_antes=bool(mesh.is_watertight),
     )
+    if (mesh.is_watertight and mesh.is_winding_consistent
+            and report.cuerpos_antes == 1 and len(mesh.faces)):
+        # ya esta limpia: no la toques. Reparar una malla sana dos veces puede
+        # dejarla peor (se quitan caras degeneradas y se vuelven a abrir huecos)
+        report.caras_despues = report.caras_antes
+        report.cuerpos_despues = 1
+        report.estanca_despues = True
+        return mesh, report
+
     tenia_normales_mal = not mesh.is_winding_consistent
     tenia_agujeros = not mesh.is_watertight
 
