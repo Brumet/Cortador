@@ -181,6 +181,24 @@ def slice_model(mesh: trimesh.Trimesh,
     total_steps = plan.total_cells
     report(0, total_steps, "Cortando")
 
+    # En modo trozos se vacia PRIMERO el modelo entero y luego se corta la piel.
+    # Al reves (cortar y vaciar cada trozo) cada trozo acaba siendo una cajita
+    # cerrada: aparecen paredes en las caras de corte, los trozos del centro
+    # salen como cubos huecos que no aportan nada, y se gasta material de mas.
+    # Vaciando antes, cada pieza es un trozo de piel y el centro no existe.
+    piel = False
+    if cfg.hollow and cfg.mode == "chunks":
+        report(0, 1, "Solidificando la piel")
+        hueca, aviso = hollow_mesh(work, cfg.wall)
+        if aviso is None and hueca is not work and not is_empty(hueca):
+            work = hueca
+            piel = True
+        else:
+            warnings.append(
+                (aviso or "No se ha podido vaciar el modelo entero") +
+                " Se vacia trozo a trozo, que gasta algo mas de material."
+            )
+
     if cfg.mode == "slabs" and cfg.slab_style == "prism":
         raw = _build_prisms(work, plan, cfg, report)
     else:
@@ -188,7 +206,7 @@ def slice_model(mesh: trimesh.Trimesh,
 
     if cfg.hollow and cfg.mode == "slabs" and cfg.slab_style == "solid":
         raw = _hollow_slabs(raw, plan, cfg, report)
-    elif cfg.hollow and cfg.mode == "chunks":
+    elif cfg.hollow and cfg.mode == "chunks" and not piel:
         raw, fallos = _hollow_chunks(raw, cfg, report)
         if fallos:
             warnings.append(

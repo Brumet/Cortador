@@ -26,9 +26,8 @@ terminado** y **cuanto mide tu impresora**, y Cortador hace dos cosas:
    pieza se sale de la cama.
 
 Con **Brumo**, la mascota de Brumet, a 1,80 m de alto en una FLSUN V400: de
-**901 litros macizo a 57,8** (94 % menos de material y de horas de maquina), en
-224 piezas que caben todas en la cama redonda. Con un gorila del mismo tamano en
-una Ender 3, de 1.024 litros a 22.
+**901 litros macizo a 23** (97 % menos de material y de horas de maquina), en
+227 piezas que caben todas en la cama redonda.
 
 Cada pieza sale **marcada con su nombre grabado** y, si quieres, con **pasadores
 de alineacion**, para que luego puedas armar el modelo entero sin volverte loco.
@@ -37,9 +36,9 @@ Es una **aplicacion de escritorio**: se abre en su propia ventana, no en el
 navegador. Todo ocurre **en tu equipo**, funciona sin conexion y ningun modelo se
 sube a ningun servidor. Codigo libre con licencia MIT.
 
-![Brumo cortado en 224 piezas](docs/panel.png)
+![Brumo cortado en 227 piezas de piel](docs/panel.png)
 
-<p align="center"><i>Brumo, 1,80 m de alto, en 224 piezas para una FLSUN V400</i></p>
+<p align="center"><i>Brumo, 1,80 m de alto, en 227 piezas de piel para una FLSUN V400</i></p>
 
 <p align="center"><i>La rejilla de corte se dibuja encima del modelo antes de cortar nada</i></p>
 
@@ -269,6 +268,17 @@ numeros exactos para tu perfil:
 
 En el panel tienes la calculadora al lado: pones **perimetros x ancho de linea**
 y te da el espesor exacto (4 perimetros de 0,4 mm = 1,6 mm de pared).
+
+### Primero la piel, despues el corte
+
+El orden importa, y mucho. Cortador **vacia el modelo entero primero** y luego
+parte esa piel en piezas. Cada pieza es un trozo de cascara.
+
+Si se hace al reves (cortar y vaciar cada trozo), cada trozo sale como una
+**cajita cerrada**: aparecen paredes en las caras de corte que no aportan nada,
+los trozos del centro salen como cubos huecos que no tocan la superficie, y se
+gasta el doble de material. En Brumo a 1,80 m: **23 litros haciendolo bien,
+57,8 haciendolo al reves**.
 
 ### Como lo hace
 

@@ -272,10 +272,28 @@ def test_tambien_se_limpian_las_motas_en_macizo():
 
 
 def test_una_pieza_hueca_no_se_parte_en_dos():
-    """La piel y la camara interior son una sola pieza, no dos."""
+    """Una piel con camara interior es una sola pieza, no dos."""
+    import numpy as np
+    import trimesh
+    from cortador.slicer import _reunir_cavidades
+
+    fuera = trimesh.creation.box(extents=[40.0, 40.0, 40.0])
+    dentro = trimesh.creation.box(extents=[30.0, 30.0, 30.0])
+    dentro.invert()
+    partes = [fuera, dentro]
+    assert len(_reunir_cavidades(partes)) == 1
+
+
+def test_las_piezas_son_piel_no_cajas():
+    """El corte reparte la piel del modelo; no fabrica cajitas cerradas.
+
+    Es el fallo que se corrigio: si se corta primero y se vacia cada trozo
+    despues, cada trozo sale como una caja con paredes en las caras de corte y
+    los del centro salen como cubos huecos que no aportan nada.
+    """
     import trimesh
     from cortador.config import LabelOptions, PrinterSpec, SliceConfig
-    from cortador.slicer import _reunir_cavidades, slice_model
+    from cortador.slicer import slice_model
 
     esfera = trimesh.creation.icosphere(subdivisions=4, radius=80)
     res = slice_model(esfera, SliceConfig(printer=PrinterSpec(100, 100, 100),
@@ -285,12 +303,31 @@ def test_una_pieza_hueca_no_se_parte_en_dos():
     for pieza in res.pieces:
         assert pieza.mesh.is_watertight
         assert pieza.mesh.volume > 0         # el hueco no cuenta como pieza
+        # una pieza de piel ocupa una fraccion pequena de su caja
+        assert pieza.mesh.volume < 0.35 * float(pieza.mesh.bounding_box.volume)
 
-    # y la funcion por separado
-    hueca = res.pieces[0].mesh
-    partes = hueca.split(only_watertight=False)
-    assert len(partes) == 2                  # piel + camara
-    assert len(_reunir_cavidades(partes)) == 1
+    # el material total es el de la piel del modelo entero, no el de ocho cajas
+    from cortador.hollow import hollow_mesh
+    piel, aviso = hollow_mesh(esfera, 4.0)
+    assert aviso is None
+    assert res.hollow_volume < piel.volume * 1.25
+
+
+def test_el_centro_de_un_modelo_hueco_no_genera_piezas():
+    """Dentro de la camara no hay material, asi que no hay nada que cortar."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    cubo = trimesh.creation.box(extents=[300.0, 300.0, 300.0])
+    res = slice_model(cubo, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                        hollow=True, wall=5.0,
+                                        labels=LabelOptions(enabled=False)))
+    # rejilla de 3x3x3 = 27 celdas, pero la del centro esta hueca
+    assert res.plan.total_cells == 27
+    centros = [p for p in res.pieces if tuple(p.index) == (1, 1, 1)]
+    assert not centros, [p.name for p in centros]
+    assert res.count <= 26
 
 
 def test_se_descartan_las_rebabas_finas():
