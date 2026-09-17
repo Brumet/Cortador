@@ -20,6 +20,7 @@ import sys
 import tempfile
 from typing import List, Optional, Tuple
 
+from .marca import logo
 from .registro import paso
 
 ANCHO, ALTO = 1440, 900
@@ -131,7 +132,9 @@ def escribir_espera(url: str, registro: str) -> str:
     responde, salta. Si no responde, lo dice y ensena donde esta el registro.
     """
     destino = os.path.join(carpeta_perfil(), "espera.html")
-    html = _HTML_ESPERA.replace("URL_DEL_SERVIDOR", url).replace("RUTA_REGISTRO", registro)
+    html = (_HTML_ESPERA.replace("URL_DEL_SERVIDOR", url)
+            .replace("RUTA_REGISTRO", registro)
+            .replace("LOGO_BRUMET", logo()))
     with open(destino, "w", encoding="utf-8") as fh:
         fh.write(html)
     return destino
@@ -147,16 +150,18 @@ _HTML_ESPERA = """<!doctype html>
          font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
          -webkit-user-select: none; user-select: none; }
   .caja { text-align: center; max-width: 640px; padding: 0 32px; }
-  .marca { font-size: 34px; font-weight: 650; letter-spacing: -.02em; }
-  .marca span { opacity: .45; font-weight: 400; }
-  .nota { margin-top: 10px; font-size: 14px; color: #8e8e93; }
-  .barra { margin: 28px auto 0; width: 240px; height: 3px; border-radius: 3px;
-           background: #1d1d20; overflow: hidden; }
-  .barra i { display: block; width: 40%; height: 100%; border-radius: 3px;
-             background: linear-gradient(90deg, #0a84ff, #64d2ff);
-             animation: corre 1.25s ease-in-out infinite; }
-  @keyframes corre { 0% { transform: translateX(-110%); }
-                     100% { transform: translateX(260%); } }
+  .marca { position: relative; display: inline-block; padding: 14px 26px; }
+  .marca svg { height: 74px; width: auto; display: block; }
+  .marca-texto { font-size: 34px; font-weight: 650; letter-spacing: .04em; }
+  .hilo { position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+          background: linear-gradient(90deg, transparent, #64d2ff 12%, #0a84ff 50%, #64d2ff 88%, transparent);
+          box-shadow: 0 0 14px rgba(10,132,255,.85);
+          animation: corta 2.6s cubic-bezier(.65,0,.35,1) infinite; }
+  @keyframes corta { 0% { top: -6%; opacity: 0; } 12% { opacity: 1; }
+                     88% { opacity: 1; } 100% { top: 106%; opacity: 0; } }
+  .app { margin-top: 18px; font-size: 12px; letter-spacing: .34em;
+         text-transform: uppercase; color: #8e8e93; }
+  .nota { margin-top: 14px; font-size: 14px; color: #8e8e93; }
   #malo { display: none; margin-top: 26px; text-align: left; }
   #malo h2 { font-size: 18px; margin: 0 0 8px; }
   #malo p { color: #aeaeb2; font-size: 14px; line-height: 1.55; margin: 0; }
@@ -166,9 +171,9 @@ _HTML_ESPERA = """<!doctype html>
 </style></head>
 <body>
   <div class="caja">
-    <div class="marca">Cortador <span>&middot; by Brumet</span></div>
+    <div class="marca">LOGO_BRUMET<span class="hilo"></span></div>
+    <div class="app">Cortador</div>
     <div class="nota" id="nota">Preparando el motor de corte&hellip;</div>
-    <div class="barra" id="barra"><i></i></div>
     <div id="malo">
       <h2>El motor interno no ha arrancado</h2>
       <p>La ventana esta bien, pero el servidor local no responde. Suele ser el
@@ -183,7 +188,7 @@ _HTML_ESPERA = """<!doctype html>
   function probar() {
     intentos++;
     if (intentos > 150) {                       // ~2 minutos
-      document.getElementById('barra').style.display = 'none';
+      document.querySelector('.hilo').style.display = 'none';
       document.getElementById('nota').textContent = '';
       document.getElementById('malo').style.display = 'block';
       return;

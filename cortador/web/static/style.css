@@ -65,12 +65,11 @@ body { display: flex; flex-direction: column; overflow: hidden; }
   border-bottom: 1px solid var(--borde);
   position: relative; z-index: 20;
 }
-.marca { display: flex; align-items: center; gap: 10px; }
-.logo { width: 26px; height: 26px; }
+.marca { display: flex; align-items: center; gap: 11px; }
+.logo { height: 28px; width: auto; }
 @media (prefers-color-scheme: dark) { .logo { filter: invert(1); } }
-.titulo { display: flex; flex-direction: column; line-height: 1.1; }
-.titulo b { font-size: 15px; letter-spacing: -.2px; }
-.titulo span { font-size: 10px; color: var(--tenue); letter-spacing: .06em; text-transform: uppercase; }
+.separador-marca { width: 1px; height: 22px; background: var(--borde); }
+.nombre-app { font-size: 15px; letter-spacing: -.2px; font-weight: 600; }
 
 .archivo { display: flex; align-items: center; gap: 12px; flex: 1 1 auto; min-width: 0; }
 #nombre-archivo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -312,7 +311,7 @@ input[type=range]::-moz-range-thumb {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center; padding: 40px; gap: 10px;
 }
-.logo-grande { width: 52px; height: 52px; opacity: .9; margin-bottom: 6px; }
+.logo-grande { height: 62px; width: auto; opacity: .92; margin-bottom: 10px; }
 @media (prefers-color-scheme: dark) { .logo-grande { filter: invert(1); } }
 .vacio h1 { font-size: 30px; font-weight: 600; letter-spacing: -.8px; margin: 0; line-height: 1.15; }
 .vacio p { max-width: 430px; color: var(--tenue); margin: 0; }

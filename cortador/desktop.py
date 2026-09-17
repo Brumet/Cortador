@@ -33,6 +33,7 @@ import time
 from typing import Optional, Tuple
 
 from . import ventana as ventana_app
+from .marca import logo
 from .registro import fallo, paso, ruta as ruta_registro
 
 TITULO = "Cortador  ·  by Brumet"
@@ -169,16 +170,18 @@ _ESTILO = """
     -webkit-user-select: none; user-select: none;
   }
   .caja { text-align: center; max-width: 620px; padding: 0 32px; }
-  .marca { font-size: 34px; font-weight: 650; letter-spacing: -.02em; }
-  .marca span { opacity: .45; font-weight: 400; }
-  .nota { margin-top: 10px; font-size: 14px; color: #8e8e93; }
-  .barra { margin: 28px auto 0; width: 240px; height: 3px; border-radius: 3px;
-           background: #1d1d20; overflow: hidden; }
-  .barra i { display: block; width: 40%; height: 100%; border-radius: 3px;
-             background: linear-gradient(90deg, #0a84ff, #64d2ff);
-             animation: corre 1.25s ease-in-out infinite; }
-  @keyframes corre { 0% { transform: translateX(-110%); }
-                     100% { transform: translateX(260%); } }
+  .marca { position: relative; display: inline-block; padding: 14px 26px; }
+  .marca svg { height: 74px; width: auto; display: block; }
+  .marca-texto { font-size: 34px; font-weight: 650; letter-spacing: .04em; }
+  .hilo { position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px;
+          background: linear-gradient(90deg, transparent, #64d2ff 12%, #0a84ff 50%, #64d2ff 88%, transparent);
+          box-shadow: 0 0 14px rgba(10,132,255,.85);
+          animation: corta 2.6s cubic-bezier(.65,0,.35,1) infinite; }
+  @keyframes corta { 0% { top: -6%; opacity: 0; } 12% { opacity: 1; }
+                     88% { opacity: 1; } 100% { top: 106%; opacity: 0; } }
+  .app { margin-top: 18px; font-size: 12px; letter-spacing: .34em;
+         text-transform: uppercase; color: #8e8e93; }
+  .nota { margin-top: 14px; font-size: 14px; color: #8e8e93; }
   .error { text-align: left; }
   .error h1 { font-size: 22px; margin: 0 0 12px; }
   .error p { color: #aeaeb2; font-size: 14px; line-height: 1.55; }
@@ -190,9 +193,9 @@ _ESTILO = """
 _HTML_ESPERA = f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Cortador</title><style>{_ESTILO}</style></head><body>
   <div class="caja">
-    <div class="marca">Cortador <span>· by Brumet</span></div>
+    <div class="marca">{logo()}<span class="hilo"></span></div>
+    <div class="app">Cortador</div>
     <div class="nota">Preparando el motor de corte...</div>
-    <div class="barra"><i></i></div>
   </div>
 </body></html>"""
 
@@ -202,7 +205,7 @@ def _html_error(mensaje: str) -> str:
     return f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Cortador</title><style>{_ESTILO}</style></head><body>
   <div class="caja error">
-    <div class="marca">Cortador <span>· by Brumet</span></div>
+    <div class="marca">{logo()}</div>
     <h1 style="margin-top:22px">No he podido arrancar</h1>
     <p>La ventana esta bien, pero el motor interno no ha llegado a responder.
        Suele ser el antivirus o el cortafuegos bloqueando 127.0.0.1. Cierra y

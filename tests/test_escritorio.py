@@ -71,3 +71,11 @@ def test_la_app_sabe_hacerse_una_foto():
         texto = fh.read()
     assert "CORTADOR_CAPTURA" in texto
     assert "La ventana no llego a abrirse" in texto
+
+
+def test_la_pantalla_de_espera_lleva_el_logo_completo():
+    with open(os.path.join(APP, "espera.html"), encoding="utf-8") as fh:
+        espera = fh.read()
+    assert "brumet-blanco.svg" in espera
+    assert 'class="hilo"' in espera and "@keyframes corta" in espera
+    assert os.path.exists(os.path.join(APP, "assets", "brumet-blanco.svg"))
