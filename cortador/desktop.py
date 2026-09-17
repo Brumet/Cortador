@@ -52,7 +52,12 @@ def _arrancar_servidor(host: str, port: int):
 
     from .web.server import create_app
 
-    config = uvicorn.Config(create_app(), host=host, port=port, log_level="warning")
+    # log_config=None a proposito: el diccionario de logging por defecto de
+    # uvicorn referencia sus formatters por nombre y, dentro del ejecutable
+    # empaquetado, dictConfig no los encuentra ("Unable to configure formatter
+    # 'default'"). Sin el, el servidor arranca igual y registra por la raiz.
+    config = uvicorn.Config(create_app(), host=host, port=port,
+                            log_level="warning", log_config=None)
     servidor = uvicorn.Server(config)
     hilo = threading.Thread(target=servidor.run, daemon=True)
     hilo.start()

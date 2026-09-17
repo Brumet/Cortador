@@ -380,7 +380,8 @@ def run(host: str = "127.0.0.1", port: int = 8000, open_browser: bool = True) ->
                 pass
         threading.Thread(target=_open, daemon=True).start()
     print(f"Cortador esta en {url}  (Ctrl+C para salir)")
-    uvicorn.run(create_app(), host=host, port=port, log_level="warning")
+    uvicorn.run(create_app(), host=host, port=port, log_level="warning",
+                log_config=None)
 
 
 app = None

@@ -11,6 +11,9 @@ import sys
 
 def main() -> None:
     multiprocessing.freeze_support()
+    if any(a in ("--diagnostico", "--diagnose") for a in sys.argv[1:]):
+        _diagnostico()
+        return
     if any(a in ("--comprobar", "--check", "--version") for a in sys.argv[1:]):
         # lo usa la compilacion automatica para verificar que el binario arranca
         from cortador import __version__
@@ -29,9 +32,60 @@ def main() -> None:
         sys.exit(1)
 
 
+def _diagnostico() -> None:
+    """Informe de por que puede no arrancar, para poder pegarlo tal cual."""
+    import importlib
+    import platform
+
+    lineas = ["Cortador - diagnostico", "=" * 40]
+    try:
+        from cortador import __version__
+        lineas.append(f"version        : {__version__}")
+    except Exception as exc:
+        lineas.append(f"version        : ERROR {exc}")
+    lineas.append(f"sistema        : {platform.platform()}")
+    lineas.append(f"python         : {sys.version.split()[0]}")
+    lineas.append(f"empaquetado    : {getattr(sys, 'frozen', False)}")
+
+    for modulo in ("trimesh", "shapely", "manifold3d", "numpy", "scipy", "rtree",
+                   "fastapi", "uvicorn", "click", "webview"):
+        try:
+            importlib.import_module(modulo)
+            lineas.append(f"  {modulo:12s} ok")
+        except Exception as exc:
+            lineas.append(f"  {modulo:12s} FALTA ({exc})")
+
+    try:
+        from cortador.desktop import backend_disponible
+        hay, motor = backend_disponible()
+        lineas.append(f"ventana        : {'si' if hay else 'no'} ({motor})")
+    except Exception as exc:
+        lineas.append(f"ventana        : ERROR {exc}")
+
+    try:
+        from cortador.web.server import create_app, free_port
+        create_app()
+        lineas.append("servidor       : se crea bien")
+        lineas.append(f"puerto libre   : {free_port('127.0.0.1', 8000)}")
+    except Exception as exc:
+        lineas.append(f"servidor       : ERROR {exc}")
+
+    texto = "\n".join(lineas)
+    print(texto)
+    try:
+        destino = os.path.join(os.path.dirname(sys.executable), "cortador_diagnostico.txt")
+        with open(destino, "w", encoding="utf-8") as fh:
+            fh.write(texto + "\n")
+        print(f"\nGuardado en {destino}")
+    except Exception:
+        pass
+
+
 def _reportar(exc: Exception) -> None:
     import traceback
-    mensaje = f"Cortador no ha podido arrancar:\n\n{exc}"
+    mensaje = (f"Cortador no ha podido arrancar:\n\n{type(exc).__name__}: {exc}\n\n"
+               "Ejecutalo con  --diagnostico  desde la consola para un informe "
+               "completo, o manda el archivo de detalles.")
     try:
         destino = os.path.join(os.path.dirname(sys.executable), "cortador_error.log")
         with open(destino, "w", encoding="utf-8") as fh:

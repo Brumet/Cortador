@@ -54,6 +54,10 @@ un USB y usarlo en cualquier PC las veces que quieras.
 > Windows mostrara un aviso de SmartScreen la primera vez porque el archivo no
 > esta firmado: *Mas informacion → Ejecutar de todas formas*.
 
+Si no arranca, abrelo desde la consola con `Cortador-Windows.exe --diagnostico`:
+escribe un informe (`cortador_diagnostico.txt`) al lado del ejecutable con la
+version, lo que falta y si hay ventana de escritorio disponible.
+
 ### Opcion 2 — desde el codigo (Windows)
 
 1. Descarga el codigo: en **[Releases](https://github.com/Brumet/Cortador/releases/latest)**
@@ -409,7 +413,7 @@ export_result(resultado, "salida/", mesh_format="stl")
 
 ```bash
 pip install -e ".[web,dev]"
-pytest -q                                   # 169 pruebas
+pytest -q                                   # 171 pruebas
 python examples/gorila_demo.py gorila.stl   # gorila de prueba de 1,8 m
 python examples/desde_capas.py modelo.json modelo.stl   # capas -> STL
 python examples/figura_demo.py figura.stl   # figura simple de prueba

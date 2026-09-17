@@ -25,6 +25,7 @@ hiddenimports = [
     "uvicorn.protocols.websockets", "uvicorn.protocols.websockets.auto",
     "uvicorn.lifespan", "uvicorn.lifespan.on", "uvicorn.lifespan.off",
     "anyio", "h11", "multipart", "python_multipart",
+    "click", "colorama", "logging.config", "logging.handlers",
     "manifold3d", "mapbox_earcut", "rtree", "scipy.spatial", "scipy.sparse.csgraph",
 ]
 
