@@ -58,3 +58,32 @@ def test_arranca_sin_configurar_el_logging(tmp_path):
     finally:
         servidor.should_exit = True
         hilo.join(timeout=10)
+
+
+def test_si_la_ventana_falla_se_abre_el_navegador(monkeypatch):
+    """Sin WebView2 no se puede abrir ventana: no dejar al usuario sin app."""
+    import sys
+    import types
+
+    from cortador.web.server import free_port
+
+    falso = types.ModuleType("webview")
+    falso.create_window = lambda *a, **k: None
+
+    def revienta(*a, **k):
+        raise RuntimeError("WebView2 no esta instalado")
+
+    falso.start = revienta
+    monkeypatch.setitem(sys.modules, "webview", falso)
+    monkeypatch.setattr(desktop, "backend_disponible", lambda: (True, "WebView2"))
+
+    abierto = {}
+    import webbrowser
+    monkeypatch.setattr(webbrowser, "open", lambda url: abierto.setdefault("url", url))
+
+    # que no se quede esperando para siempre en el bucle del navegador
+    monkeypatch.setattr(desktop, "_mantener_vivo", lambda url: None)
+
+    puerto = free_port("127.0.0.1", 8951)
+    assert desktop.run(port=puerto) == 0
+    assert abierto.get("url", "").endswith(f":{puerto}/")

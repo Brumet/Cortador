@@ -80,6 +80,16 @@ def _esperar(url: str, servidor, segundos: float = 25.0) -> bool:
     return False
 
 
+def _mantener_vivo(url: str) -> None:
+    """Deja el servidor en marcha hasta que el usuario corte con Ctrl+C."""
+    print(f"Cortador esta en {url}  (Ctrl+C para salir)")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+
 def run(host: str = "127.0.0.1",
         port: int = 8000,
         forzar_navegador: bool = False,
@@ -103,30 +113,32 @@ def run(host: str = "127.0.0.1",
                   "(ver README, apartado Instalacion).")
         import webbrowser
         webbrowser.open(url)
-        print(f"Cortador esta en {url}  (Ctrl+C para salir)")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
+        _mantener_vivo(url)
         servidor.should_exit = True
         return 0
 
     import webview
 
-    ventana = webview.create_window(
-        TITULO, url,
-        width=ANCHO, height=ALTO, min_size=(1024, 700),
-        confirm_close=False, text_select=True,
-    )
     try:
+        webview.create_window(
+            TITULO, url,
+            width=ANCHO, height=ALTO, min_size=(1024, 700),
+            confirm_close=False, text_select=True,
+        )
         if os.path.exists(ICONO):
-            webview.start(debug=debug, icon=ICONO)
+            try:
+                webview.start(debug=debug, icon=ICONO)
+            except TypeError:              # versiones sin soporte de icono
+                webview.start(debug=debug)
         else:
             webview.start(debug=debug)
-    except TypeError:                      # versiones sin soporte de icono
-        webview.start(debug=debug)
+    except Exception as exc:
+        # el motor de ventana esta pero no arranca (falta WebView2, sin sesion
+        # grafica...): mejor el navegador que dejar al usuario sin herramienta
+        print(f"No se ha podido abrir la ventana ({exc}); uso el navegador.")
+        import webbrowser
+        webbrowser.open(url)
+        _mantener_vivo(url)
     finally:
         servidor.should_exit = True
-    del ventana
     return 0
