@@ -97,6 +97,9 @@ begin
               'Sin el, Cortador funciona igual pero se abre en el navegador.' + #13#10#13#10 +
               'Quieres descargarlo ahora desde Microsoft? (se abre la pagina oficial)',
               mbConfirmation, MB_YESNO) = IDYES then
-      ShellExec('open', 'https://developer.microsoft.com/microsoft-edge/webview2/', '', '', SW_SHOW, ewNoWait, codigo);
+    begin
+      if not ShellExec('open', 'https://developer.microsoft.com/microsoft-edge/webview2/', '', '', SW_SHOW, ewNoWait, codigo) then
+        MsgBox('No he podido abrir la pagina. Busca "WebView2 Runtime" en Google.', mbInformation, MB_OK);
+    end;
   end;
 end;
