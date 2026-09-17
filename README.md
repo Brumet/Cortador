@@ -25,8 +25,10 @@ terminado** y **cuanto mide tu impresora**, y Cortador hace dos cosas:
 2. **Corta el resultado en trozos del tamano de tu impresora**. Siempre. Ninguna
    pieza se sale de la cama.
 
-Con un gorila de 1,80 m en una Ender 3: de **1.024 litros macizo a 22 litros**
-(98 % menos de material y de horas de maquina), en 305 piezas que caben todas.
+Con **Brumo** a 1,80 m de alto en una FLSUN V400: de **896 litros macizo a 74**
+(92 % menos de material y de horas de maquina), en 297 piezas que caben todas en
+la cama redonda. Con un gorila del mismo tamano en una Ender 3, de 1.024 litros
+a 22.
 
 Cada pieza sale **marcada con su nombre grabado** y, si quieres, con **pasadores
 de alineacion**, para que luego puedas armar el modelo entero sin volverte loco.
@@ -35,7 +37,13 @@ Es una **aplicacion de escritorio**: se abre en su propia ventana, no en el
 navegador. Todo ocurre **en tu equipo**, funciona sin conexion y ningun modelo se
 sube a ningun servidor. Codigo libre con licencia MIT.
 
-![panel de Cortador](docs/panel.png)
+![Brumo cortado en 297 piezas](docs/panel.png)
+
+<p align="center"><i>Brumo, 1,80 m de alto, en 297 piezas para una FLSUN V400</i></p>
+
+<p align="center"><i>La rejilla de corte se dibuja encima del modelo antes de cortar nada</i></p>
+
+![rejilla en vivo](docs/rejilla.png)
 
 <p align="center"><i>El panel de ajustes: perfil de maquina, giro y espesor de la piel</i></p>
 
@@ -145,11 +153,17 @@ cortador app        # o doble clic en el .exe / en Cortador.bat
 9. Al terminar tienes la vista explosionada, el filtro por capa, el despiece
    completo y la descarga.
 
+<p align="center"><i>El mismo modelo en rebanadas apiladas</i></p>
+
 ![modo laminas](docs/laminas.png)
 
 <p align="center"><i>Una capa aislada, para revisar lo que va en cada altura</i></p>
 
 ![una capa](docs/pieza.png)
+
+<p align="center"><i>Una sola rebanada, ya vaciada: solo queda la piel</i></p>
+
+![una rebanada hueca](docs/hueco.png)
 
 <p align="center"><i>Mientras trabaja siempre sabes por donde va</i></p>
 
