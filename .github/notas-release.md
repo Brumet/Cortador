@@ -17,8 +17,12 @@ ningun modelo se sube a ningun servidor.
 
 ### Que trae
 
-- Corte en **trozos** que caben en la maquina o en **laminas** de 3, 5, 18 mm...
+- **Espesor de la malla**: solidifica la piel del modelo (como el *Solidify* de
+  Blender) y deja el interior hueco. El laminador solo hace perimetros, sin
+  relleno: en un gorila de 1,80 m, **22 litros en vez de 1.024**.
+- **El corte siempre a la medida de tu impresora**: ninguna pieza se sale de la cama.
 - Altura final del modelo ajustable (escala a 1,80 m y corta).
+- `AJUSTES_LAMINADOR.txt` con el relleno al 0 % y los perimetros exactos.
 - **Marcas grabadas** con el nombre de cada pieza en las caras de corte.
 - Pasadores de alineacion opcionales.
 - Reparacion automatica de la malla y atajo a **3D Builder** de Windows.
