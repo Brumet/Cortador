@@ -40,6 +40,12 @@
   .nota { margin-top: 14px; font-size: 14px; color: #8e8e93; min-height: 20px; }
   .app { margin-top: 20px; font-size: 12px; letter-spacing: .34em;
          text-transform: uppercase; color: #8e8e93; }
+  .reloj { margin-top: 6px; font-size: 12px; color: #55555a;
+           font-variant-numeric: tabular-nums; }
+  .lento { display: none; margin: 18px auto 0; max-width: 460px; padding: 12px 14px;
+           border: 1px solid #2c2c2e; border-radius: 12px; background: rgba(28,28,30,.72);
+           font-size: 13px; line-height: 1.5; color: #aeaeb2; }
+  .lento button { margin-top: 8px; }
   #malo { display: none; text-align: left; margin-top: 28px; }
   #malo h2 { font-size: 19px; margin: 0 0 10px; }
   #malo p { color: #aeaeb2; font-size: 14px; line-height: 1.6; margin: 0 0 6px; }
@@ -62,6 +68,12 @@
     </div>
     <div class="app">Cortador</div>
     <div class="nota" id="nota">Preparando el motor de corte&hellip;</div>
+    <div class="reloj" id="reloj"></div>
+    <div class="lento" id="lento">
+      Esta tardando mas de lo normal. Sigue trabajando: la primera apertura
+      despues de instalar es la mas lenta.
+      <button type="button" onclick="verRegistro()">Ver que esta pasando</button>
+    </div>
 
     <div id="malo">
       <h2>No he podido arrancar el motor de corte</h2>
@@ -79,12 +91,27 @@
 <script>
   const { ipcRenderer } = require('electron')
 
+  /* Un contador a la vista: mientras corre, el usuario sabe que la app esta
+     viva. Si pasa de veinte segundos, se lo decimos en vez de callarnos. */
+  const arranque = Date.now()
+  let fallo = false
+  const reloj = setInterval(() => {
+    if (fallo) return
+    const s = Math.round((Date.now() - arranque) / 1000)
+    document.getElementById('reloj').textContent = s + ' s'
+    if (s >= 20) document.getElementById('lento').style.display = 'block'
+  }, 1000)
+
   ipcRenderer.on('paso', (_e, texto) => {
     if (String(texto).startsWith('motor|')) return
     document.getElementById('nota').textContent = texto
   })
 
   ipcRenderer.on('fallo', (_e, datos) => {
+    fallo = true
+    clearInterval(reloj)
+    document.getElementById('reloj').textContent = ''
+    document.getElementById('lento').style.display = 'none'
     document.querySelector('.hilo').style.display = 'none'
     document.getElementById('nota').textContent = ''
     document.getElementById('motivo').textContent = datos.mensaje

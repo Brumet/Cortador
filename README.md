@@ -127,15 +127,18 @@ cortador app        # o doble clic en el .exe / en Cortador.bat
    fallos, el boton **Reparar con 3D Builder** abre la herramienta de Windows para
    arreglarla a fondo (ver abajo).
 3. Pon la **altura del modelo terminado** (hay atajos: 30 cm, 1 m, 1,8 m, 2 m...).
-4. Pon el **volumen de tu maquina** (atajos para Ender 3, Bambu X1, Flsun V400,
-   Neptune 4 Max, Modix...).
-5. Si quieres la figura hueca, enciende **Vaciar el interior** y pon el espesor
-   de la piel (1,5 / 2 / 3 / 5 / 8 mm).
-6. La **rejilla de corte se dibuja en vivo** sobre el modelo: ves cuantas piezas
+4. Elige tu **maquina** en la lista de perfiles (FLSUN V400, T1 y SR, Bambu A1 y
+   A1 mini, genericas y dos de resina) o pon las medidas a mano. El perfil trae
+   ya el margen de seguridad, la boquilla y el espesor de piel que le va bien.
+5. Si hace falta, **gira el modelo** antes de cortar: 90 grados en cualquier eje
+   con un clic, o angulos a mano. Girar cambia el despiece entero.
+6. Si quieres la figura hueca, enciende **Vaciar el interior** y pon el espesor
+   de la piel (o deja que lo calcule la boquilla, ver abajo).
+7. La **rejilla de corte se dibuja en vivo** sobre el modelo: ves cuantas piezas
    van a salir antes de cortar nada.
-7. **Cortar**. Mientras trabaja ves la etapa, el contador de piezas, el tiempo
+8. **Cortar**. Mientras trabaja ves la etapa, el contador de piezas, el tiempo
    transcurrido y lo que falta, para saber que sigue avanzando.
-8. Al terminar tienes la vista explosionada, el filtro por capa, el despiece
+9. Al terminar tienes la vista explosionada, el filtro por capa, el despiece
    completo y la descarga.
 
 ![modo laminas](docs/laminas.png)
@@ -163,6 +166,37 @@ cortador app        # o doble clic en el .exe / en Cortador.bat
 
 ---
 
+## Perfiles de maquina
+
+| Perfil | Cama | Pieza mas grande que cabe | Boquilla |
+|---|---|---|---|
+| FLSUN V400 | redonda Ø300 × 410 | 200 × 200 × 398 mm | 0,4 |
+| FLSUN T1 | redonda Ø260 × 330 | 172 × 172 × 318 mm | 0,4 |
+| FLSUN SR (Super Racer) | redonda Ø260 × 330 | 172 × 172 × 318 mm | 0,4 |
+| Bambu Lab A1 | cuadrada 256 | 246 × 246 × 246 mm | 0,4 |
+| Bambu Lab A1 mini | cuadrada 180 | 170 × 170 × 170 mm | 0,4 |
+| Generica 220 / 300 | cuadrada | 210 / 288 mm de lado | 0,4 / 0,6 |
+| Resina 6" y 10" | cuadrada | 139 × 85 y 214 × 119 mm | — |
+
+Dos cosas que hacen estos perfiles y que importan:
+
+**Las FLSUN son delta y la cama es redonda.** En una cama redonda no cabe una
+pieza del ancho del plato: cabe la que entra en el cuadrado inscrito, que es el
+diametro dividido por raiz de dos. Por eso una V400 de 300 mm admite piezas de
+unos 200 mm de lado, que es exactamente lo que dice el fabricante. Si se
+planifica con 300, las piezas no entran.
+
+**Ningun perfil va al raz de la maquina.** Todos descuentan entre 5 y 6 mm por
+lado. Una pieza que mide exactamente lo que la cama es una pieza que se despega,
+que choca con el carro o que no deja sitio al brim.
+
+```bash
+cortador perfiles                       # verlos todos
+cortador cortar bota.stl --perfil flsun_v400
+```
+
+---
+
 ## El espesor de la malla (solidificar)
 
 Esto es el corazon de Cortador y es exactamente el **Solidify de Blender**: coge
@@ -183,6 +217,24 @@ que el interior deja de ser macizo.
 Despues, **el corte se hace siempre al tamano de tu maquina**: los trozos salen
 de dividir el volumen de impresion, no del espesor. Espesor y corte son dos cosas
 distintas y no se mezclan.
+
+### El espesor depende de la boquilla
+
+No es lo mismo imprimir con una boquilla de 0,4 que con una de 1,0. El laminador
+extruye lineas de algo mas del diametro de la boquilla (un 5 %), y la pared solo
+sale limpia si es un **multiplo exacto de ese ancho de linea**. Si no lo es, el
+laminador no puede rellenarla con perimetros enteros y deja una franja a medias.
+
+| Boquilla | Ancho de linea | 2 perimetros | 3 | 4 |
+|---|---|---|---|---|
+| 0,4 mm | 0,42 mm | 0,84 mm | 1,26 mm | 1,68 mm |
+| 0,6 mm | 0,63 mm | 1,26 mm | 1,89 mm | 2,52 mm |
+| 0,8 mm | 0,84 mm | 1,68 mm | 2,52 mm | 3,36 mm |
+| 1,0 mm | 1,05 mm | 2,10 mm | 3,15 mm | 4,20 mm |
+
+Eliges la boquilla en el panel de la maquina y el espesor de la piel se recalcula
+solo al multiplo mas cercano. Para gran formato con boquilla gorda, 3 perimetros
+ya dan mas de 3 mm de pared: fuerte, rapido y con poquisimo material.
 
 ### Por que ahorra tanto
 
@@ -304,6 +356,13 @@ cara de corte de la pieza B1-L03
 
 Los puntos se eligen dentro de la seccion comun a las dos piezas y separados del
 borde. Si una cara es demasiado estrecha, se salta y queda anotado en la guia.
+
+**En rebanadas, el pasador se ajusta solo.** Una espiga de 3 mm de radio y 6 mm
+de profundidad no cabe en una lamina de 4 mm con pared de 3: o la atraviesa, o no
+hay material donde alojarla. Con el ajuste automatico encendido, el pasador se
+hace pequeno hasta caber dentro de la pared y nunca llega a atravesar la pieza.
+El **macho queda arriba y la hembra abajo**, asi que la cara que se apoya en la
+cama sigue siendo plana y la primera capa se imprime sin problemas.
 
 ---
 
@@ -427,6 +486,18 @@ export_result(resultado, "salida/", mesh_format="stl")
 - En mallas reconstruidas o escaneadas puede haber superficies que se tocan: las
   piezas salen bien, pero el laminador pedira "reparar" al abrirlas (lo hace
   solo). Cortador te dice cuantas y cuales.
+
+## Apoyar el proyecto
+
+Cortador es gratis, de codigo libre y seguira siendolo: nada de lo que hace esta
+detras de un pago, y no hay version "pro".
+
+Si te ahorra material o tiempo y quieres dar una mano, dentro de la app hay un
+enlace **Apoyar el proyecto** en el pie del panel de ajustes, con las formas de
+hacerlo. Si ahi no aparece nada es que todavia no hay ningun canal configurado:
+se ponen en [`cortador/apoyo.py`](cortador/apoyo.py) y el enlace aparece solo.
+
+---
 
 ## Desarrollo
 
