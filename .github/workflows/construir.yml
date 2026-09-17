@@ -177,7 +177,8 @@ jobs:
       - name: Preparar los archivos
         run: |
           mkdir -p publicar
-          find descargas -type f -exec cp {} publicar/ \;
+          # la foto de la ventana es una comprobacion interna, no una descarga
+          find descargas -type f ! -name 'ventana*.png' -exec cp {} publicar/ \;
           chmod +x publicar/Cortador-Linux || true
           ls -la publicar
 
