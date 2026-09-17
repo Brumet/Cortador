@@ -37,6 +37,10 @@ sube a ningun servidor. Codigo libre con licencia MIT.
 
 ![panel de Cortador](docs/panel.png)
 
+<p align="center"><i>El panel de ajustes: perfil de maquina, giro y espesor de la piel</i></p>
+
+![ajustes](docs/ajustes.png)
+
 ---
 
 ## Instalacion
