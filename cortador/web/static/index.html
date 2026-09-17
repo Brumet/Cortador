@@ -89,6 +89,42 @@
       </details>
     </section>
 
+    <section class="destacada">
+      <h2>Espesor de la malla</h2>
+      <label class="fila"><span class="interruptor"><input type="checkbox" id="hueco" checked><i></i></span>
+        Solidificar la piel y vaciar el interior</label>
+      <div id="opciones-hueco">
+        <label class="grande">Espesor
+          <div class="con-unidad">
+            <input type="number" id="pared" value="3" min="0.4" step="0.5"><span>mm</span>
+          </div>
+        </label>
+        <div class="chips" id="paredes"></div>
+        <p class="pista">Convierte la superficie del modelo en un volumen de ese
+          espesor, como el <b>Solidify</b> de Blender. El interior queda hueco, asi
+          que el laminador solo tiene que hacer perimetros: <b>sin relleno</b>,
+          mucho menos material y mucho menos tiempo.</p>
+        <details>
+          <summary>Calcular el espesor por perimetros</summary>
+          <div class="rejilla3">
+            <label>Perimetros <input type="number" id="perimetros" value="4" min="1" max="20" step="1"></label>
+            <label>Linea <input type="number" id="linea" value="0.4" min="0.1" step="0.05"></label>
+            <label>&nbsp;<button class="boton pequeno" id="btn-perimetros" type="button">Aplicar</button></label>
+          </div>
+          <p class="pista" id="pista-perimetros">4 perimetros de 0,4 mm = 1,6 mm de pared.</p>
+        </details>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="tapas" checked><i></i></span>
+          Tapas macizas arriba y abajo</label>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="lengueta" checked><i></i></span>
+          Plaquita interior para la marca (en rebanadas)</label>
+        <label>Descartar trozos menores de
+          <div class="con-unidad">
+            <input type="number" id="minima" value="5" min="0" step="1"><span>mm</span>
+          </div>
+        </label>
+      </div>
+    </section>
+
     <section>
       <h2>Maquina</h2>
       <div class="rejilla3">
@@ -107,12 +143,17 @@
     <section>
       <h2>Corte</h2>
       <div class="segmento" id="modo">
-        <button class="activo" data-valor="chunks">Trozos</button>
-        <button data-valor="slabs">Laminas</button>
+        <button class="activo" data-valor="chunks">Trozos que quepan</button>
+        <button data-valor="slabs">Rebanadas</button>
       </div>
+      <p class="pista" id="pista-modo">Los trozos se calculan siempre a partir del
+        volumen de tu maquina: ninguna pieza se sale de la cama.</p>
 
       <div id="opciones-laminas" hidden>
-        <label class="grande">Espesor de cada lamina
+        <p class="pista">Rebanadas horizontales apiladas, para construir por capas
+          con laser o CNC. Ojo: esto es la <b>altura de cada rebanada</b>, no el
+          espesor de la malla.</p>
+        <label class="grande">Altura de cada rebanada
           <div class="con-unidad">
             <input type="number" id="espesor" value="5" min="0.1" step="0.5"><span>mm</span>
           </div>
@@ -135,28 +176,6 @@
         </label>
         <label class="fila"><span class="interruptor"><input type="checkbox" id="subdividir" checked><i></i></span>
           Partir la lamina si no cabe</label>
-      </div>
-
-      <label class="fila"><span class="interruptor"><input type="checkbox" id="hueco"><i></i></span>
-        Vaciar el interior (solo la piel)</label>
-      <div id="opciones-hueco" hidden>
-        <label class="grande">Espesor de la pared
-          <div class="con-unidad">
-            <input type="number" id="pared" value="3" min="0.4" step="0.5"><span>mm</span>
-          </div>
-        </label>
-        <div class="chips" id="paredes"></div>
-        <label class="fila"><span class="interruptor"><input type="checkbox" id="tapas" checked><i></i></span>
-          Primera y ultima lamina macizas</label>
-        <label class="fila"><span class="interruptor"><input type="checkbox" id="lengueta" checked><i></i></span>
-          Plaquita interior para la marca</label>
-        <label>Descartar trozos menores de
-          <div class="con-unidad">
-            <input type="number" id="minima" value="5" min="0" step="1"><span>mm</span>
-          </div>
-        </label>
-        <p class="pista">El modelo se queda hueco por dentro, como una piel: se
-          fabrica una fraccion del material y pesa mucho menos.</p>
       </div>
 
       <label>Holgura entre piezas (kerf)

@@ -143,3 +143,22 @@ def test_exportar_en_su_sitio(resultado, tmp_path):
     lejos = [trimesh.load(str(tmp_path / "piezas" / n)).bounds[0]
              for n in os.listdir(tmp_path / "piezas")]
     assert any(not np.allclose(b, [0, 0, 0], atol=1e-6) for b in lejos)
+
+
+def test_ajustes_del_laminador(caja_modulo, tmp_path):
+    from cortador.config import PrinterSpec, SliceConfig
+    from cortador.exporters import slicer_settings
+    from cortador.slicer import slice_model
+    cfg = SliceConfig(printer=PrinterSpec(100, 100, 100), hollow=True, wall=2.0,
+                      labels=LabelOptions(enabled=False))
+    res = slice_model(caja_modulo, cfg)
+    texto = slicer_settings(res, line_width=0.4)
+    assert "Relleno (infill) . . . . . . . 0 %" in texto
+    assert "5" in texto                      # 2.0 mm / 0.4 mm = 5 perimetros
+    export_result(res, str(tmp_path), write_preview=False, write_2d=False)
+    assert (tmp_path / "AJUSTES_LAMINADOR.txt").exists()
+
+
+def test_sin_vaciado_no_hay_archivo_de_ajustes(resultado, tmp_path):
+    export_result(resultado, str(tmp_path), write_preview=False, write_2d=False)
+    assert not (tmp_path / "AJUSTES_LAMINADOR.txt").exists()

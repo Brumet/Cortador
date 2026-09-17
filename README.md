@@ -16,13 +16,17 @@
 ---
 
 Metes una malla (STL, OBJ, PLY, 3MF...), dices **cuanto quieres que mida el modelo
-terminado** y **cuanto mide tu impresora**, y Cortador la parte en piezas que si
-caben, o en **laminas del espesor que quieras** (3 mm, 5 mm, 18 mm...).
+terminado** y **cuanto mide tu impresora**, y Cortador hace dos cosas:
 
-Y lo importante para gran formato: puede **vaciar el modelo** y quedarse solo con
-la **piel** del grosor que le digas, como el *Solidify* de Blender. Una figura de
-1,80 m deja de ser un bloque macizo de 230 litros y pasa a ser una cascara de
-11 litros: **95 % menos de material y de horas de maquina**.
+1. **Solidifica la piel del modelo** al espesor que le digas (3 mm, 5 mm...), como
+   el *Solidify* de Blender: la superficie se convierte en un volumen y **el
+   interior queda hueco**. El laminador ya no tiene nada que rellenar, solo
+   recorrer perimetros.
+2. **Corta el resultado en trozos del tamano de tu impresora**. Siempre. Ninguna
+   pieza se sale de la cama.
+
+Con un gorila de 1,80 m en una Ender 3: de **1.024 litros macizo a 91 litros**
+(91 % menos de material y de horas de maquina), en 308 piezas que caben todas.
 
 Cada pieza sale **marcada con su nombre grabado** y, si quieres, con **pasadores
 de alineacion**, para que luego puedas armar el modelo entero sin volverte loco.
@@ -137,56 +141,65 @@ de marcado dentro</i></p>
 
 ---
 
-## Vaciado: la figura hueca
+## El espesor de la malla (solidificar)
 
-Esta es la diferencia entre imprimir una figura de dos metros o no imprimirla.
-Cortador toma la malla como una **piel** y la solidifica hacia dentro el espesor
-que le digas, igual que el modificador *Solidify* de Blender: el resultado
-conserva **toda la forma exterior** del modelo y queda **hueco por dentro**.
+Esto es el corazon de Cortador y es exactamente el **Solidify de Blender**: coge
+la superficie del modelo, que no tiene grosor, y la convierte en un volumen del
+espesor que le digas hacia dentro. La forma exterior no cambia; lo que cambia es
+que el interior deja de ser macizo.
 
 ```
-  seccion de una lamina           seccion vaciada (pared 3 mm)
+   seccion del modelo              solidificado a 3 mm
    ###################             ###################
    ###################             ###             ###
    ###################     --->    ###             ###
    ###################             ###             ###
    ###################             ###################
-      solido, 100 %                   piel, ~10 %
+      1.024 litros                     91 litros
 ```
 
-- En **laminas planas** cada pieza es un anillo con el contorno exacto del
-  modelo a esa altura: se apilan y montas la figura hueca.
-- En **laminas solidas** la rebanada conserva su relieve exterior y se vacia por
-  dentro.
-- En **trozos** se corta la cascara completa en 3D.
-- La **primera y la ultima lamina** se dejan macizas (se puede desactivar) para
-  que la figura quede cerrada por arriba y por abajo.
-- Donde el modelo es mas fino que dos veces la pared, la pieza se queda maciza
+Despues, **el corte se hace siempre al tamano de tu maquina**: los trozos salen
+de dividir el volumen de impresion, no del espesor. Espesor y corte son dos cosas
+distintas y no se mezclan.
+
+### Por que ahorra tanto
+
+Una pieza con la pared ya solidificada a 3 mm se lamina con **relleno al 0 %**:
+el laminador solo recorre perimetros. No hay relleno que calcular ni que
+imprimir. En la carpeta de salida tienes un `AJUSTES_LAMINADOR.txt` con los
+numeros exactos para tu perfil:
+
+```
+  Relleno (infill) . . . . . . . 0 %
+  Perimetros / paredes . . . . . 8    (= 3 mm / 0.4 mm de linea)
+  Ancho de linea . . . . . . . . 0.4 mm
+```
+
+En el panel tienes la calculadora al lado: pones **perimetros x ancho de linea**
+y te da el espesor exacto (4 perimetros de 0,4 mm = 1,6 mm de pared).
+
+### Como lo hace
+
+Cada trozo se solidifica **por separado**, despues de cortarlo. Asi la malla de
+trabajo siempre es pequena, el desplazamiento de la superficie se porta bien y,
+si un trozo con recovecos muy cerrados no admite el vaciado, solo ese queda
+macizo (te lo dice) en vez de arruinar el trabajo entero. En el gorila de 1,80 m
+fallan 11 de 308.
+
+- Donde el modelo es mas fino que dos veces el espesor, la pieza se queda maciza
   sola: nunca salen piezas de aire.
 - Al encoger un contorno con detalles finos aparecen esquirlas de decimas de
-  milimetro. Cortador las limpia (`--pieza-minima`, 5 mm por defecto): en un
-  gorila de 2 m eso es la diferencia entre 9.800 fragmentos inservibles y
-  **200 piezas de verdad**.
+  milimetro. Cortador las limpia (`--pieza-minima`, 5 mm por defecto).
+- Los trozos sueltos de una misma celda se separan en piezas con nombre propio
+  (`A2-L06a`, `A2-L06b`), cada una con su archivo y su marca.
 
-### Cada trozo suelto es una pieza
+### Rebanadas apiladas (otra cosa distinta)
 
-Una lamina a la altura de las piernas de una figura son **dos anillos que no se
-tocan**: Cortador los separa en piezas distintas (`L20a`, `L20b`), cada una con
-su archivo, su marca y sus vecinas bien apuntadas en la guia. Se puede desactivar
-con `--sin-separar-islas`.
-
-### Como se marcan las laminas huecas
-
-En una pared de 3 mm no cabe ningun texto legible, asi que Cortador anade una
-**plaquita interior** unida al anillo y graba ahi el nombre. Queda escondida
-dentro de la figura montada y ademas refuerza la lamina.
-
-```bash
-cortador cortar gorila.stl --modo laminas --espesor 25 --estilo-lamina placa \
-    --hueco --pared 3
-```
-
----
+Aparte del corte en trozos, Cortador puede rebanar el modelo en **capas
+horizontales** de una altura fija para construir por capas con laser o CNC
+(contrachapado, MDF, carton). Ahi el numero que pones es la **altura de cada
+rebanada**, no el espesor de la malla; las dos cosas se pueden combinar. Se
+exportan ademas los contornos en **SVG y DXF** (capa `CORTE` y capa `MARCA`).
 
 ## Reparar la malla
 
@@ -211,37 +224,26 @@ cortador reparar figura.stl --windows  # la abre en 3D Builder
 
 ---
 
-## Los dos modos de corte
+## El corte
 
-### `trozos` — para imprimir en 3D
-
-Divide la malla en una rejilla calculada para que **cada trozo quepa** en el
-volumen de impresion. Conserva toda la geometria original.
+Siempre a la medida de tu maquina. Cortador divide el volumen del modelo en una
+rejilla calculada para que **cada trozo quepa** en la cama, descontando el margen
+de seguridad que le pongas.
 
 ```
-   modelo 930 x 302 x 1800        impresora 220x220x250
+   modelo 1129 x 583 x 1800       impresora 220x220x250
    +----------------+             +--+--+--+--+--+
    |                |             |A1|B1|C1|D1|E1|  L08
-   |     figura     |    --->     +--+--+--+--+--+
+   |     gorila     |    --->     +--+--+--+--+--+
    |                |             |A1|B1|C1|D1|E1|  L07
    +----------------+             +--+--+--+--+--+   ...
-                                   5 x 2 x 8 = 55 piezas
+                                   6 x 3 x 8 = 308 piezas
 ```
 
-### `laminas` — para construir por capas
-
-Corta el modelo en rebanadas del espesor exacto que le digas. Dos estilos:
-
-| Estilo | Que hace | Para que sirve |
-|---|---|---|
-| `solida` | Rebanada real: conserva el relieve dentro del espesor | Impresion 3D por capas gruesas, moldes |
-| `placa` | Extruye el **contorno** de la seccion: placa plana | Corte laser, CNC, carton, MDF, contrachapado |
-
-En modo `placa` se exportan ademas los contornos en **SVG y DXF** (capa `CORTE`
-para el contorno y capa `MARCA` para el texto), listos para la laser. Si una lamina
-no cabe en la maquina, se subdivide tambien en XY.
-
----
+Puedes forzar las divisiones (`--divisiones 3x2x4`), dejar holgura entre piezas
+para el pegado (`--kerf 0.3`) y elegir el motor de corte. Y si prefieres
+construir por capas en vez de por trozos, esta el modo rebanadas explicado
+arriba.
 
 ## Marcas de armado
 
@@ -285,6 +287,7 @@ borde. Si una cara es demasiado estrecha, se salta y queda anotado en la guia.
 salida/
 ├── piezas/              A1-L01.stl, A1-L02.stl, ...   (marcadas y en el origen)
 ├── 2d/                  A1-L01.svg / .dxf             (modo lamina plana)
+├── AJUSTES_LAMINADOR.txt  relleno 0 %, perimetros y ancho de linea exactos
 ├── espigas/             espiga_d6mm.stl + LEEME.txt
 ├── GUIA_DE_ARMADO.md    orden de montaje capa por capa, con las vecinas de cada pieza
 ├── despiece.csv         tabla para la hoja de calculo
@@ -309,9 +312,9 @@ cortador cortar figura.stl --tamano 1800 -i 220x220x250 --margen 3 \
 # laminas de 5 mm, placa plana para corte laser
 cortador cortar figura.stl --modo laminas --espesor 5 --estilo-lamina placa
 
-# gorila de 2 m hueco, laminas de 25 mm con pared de 3 mm
-cortador cortar gorila.stl --tamano 2000 --modo laminas --espesor 25 \
-    --estilo-lamina placa --hueco --pared 3
+# gorila de 1,80 m con piel de 3 mm, en trozos para una Ender 3
+cortador cortar gorila.stl --tamano 1800 -i 220x220x250 --margen 2 \
+    --solidificar --espesor-malla 3 --marca-tam 12
 ```
 
 | Opcion | Que hace |
@@ -323,8 +326,8 @@ cortador cortar gorila.stl --tamano 2000 --modo laminas --espesor 25 \
 | `--modo trozos\|laminas` | tipo de corte |
 | `--espesor N` · `--eje z` | espesor y eje de apilado de las laminas |
 | `--estilo-lamina solido\|placa` | rebanada real o placa plana extruida |
-| `--hueco` | vaciar el interior y dejar solo la piel |
-| `--pared N` | espesor de esa piel (3 mm por defecto) |
+| `--hueco` / `--solidificar` | solidificar la piel y vaciar el interior |
+| `--pared N` / `--espesor-malla N` | espesor de esa piel (3 mm por defecto) |
 | `--sin-tapas` | vaciar tambien la primera y la ultima lamina |
 | `--sin-lengueta` | no anadir la plaquita interior de marcado |
 | `--sin-separar-islas` | dejar en un solo archivo los trozos sueltos de una capa |
@@ -371,6 +374,9 @@ export_result(resultado, "salida/", mesh_format="stl")
 
 ## Consejos practicos
 
+- **Espesor de la malla**: 2-3 mm aguanta bien una figura de 2 m si va pegada
+  sobre una estructura; 4-5 mm si la pieza tiene que sostenerse sola. Piensalo en
+  perimetros: 3 mm son 8 perimetros de 0,4 mm.
 - **Kerf**: si las piezas quedan justas al pegar, prueba `0.2` o `0.3` mm.
 - **Marcas**: en piezas pequenas baja la letra a 5-6 mm; con 0,6 mm de profundidad
   ya se lee bien y no debilita la pieza.
@@ -387,16 +393,19 @@ export_result(resultado, "salida/", mesh_format="stl")
 - El corte es siempre **ortogonal**: no hay cortes en diagonal ni por superficies curvas.
 - No reorienta las piezas para optimizar la impresion.
 - Los modelos con auto-intersecciones muy severas pueden necesitar 3D Builder.
-- El vaciado en modo *trozos* usa un desplazamiento de la superficie: en modelos
-  con recovecos muy cerrados puede no salir y entonces se corta macizo (se avisa).
-  El vaciado por laminas es exacto y nunca falla.
+- El solidificado usa un desplazamiento de la superficie (como el Solidify de
+  Blender): en trozos con recovecos muy cerrados puede no salir y ese trozo queda
+  macizo (se avisa). En el gorila de 1,80 m fallan 11 de 308.
+- El interior de cada trozo queda como una camara cerrada. Para FDM es justo lo
+  que se quiere; para resina habria que anadir agujeros de drenaje a mano.
 
 ## Desarrollo
 
 ```bash
 pip install -e ".[web,dev]"
-pytest -q                                   # 162 pruebas
+pytest -q                                   # 165 pruebas
 python examples/gorila_demo.py gorila.stl   # gorila de prueba de 1,8 m
+python examples/desde_capas.py modelo.json modelo.stl   # capas -> STL
 python examples/figura_demo.py figura.stl   # figura simple de prueba
 ```
 
@@ -404,7 +413,7 @@ python examples/figura_demo.py figura.stl   # figura simple de prueba
 |---|---|
 | `cortador/config.py` | opciones y validacion |
 | `cortador/meshio.py` | carga, reparacion, escalado, exportacion |
-| `cortador/hollow.py` | vaciado: piel 3D, anillos 2D y plaquita de marcado |
+| `cortador/hollow.py` | solidificado: piel 3D, anillos 2D y plaquita de marcado |
 | `cortador/repair.py` | diagnostico, reparacion automatica y 3D Builder |
 | `cortador/planner.py` | donde van los planos de corte y como se llama cada pieza |
 | `cortador/geometry.py` | recortes por caja, secciones, booleanas tolerantes |

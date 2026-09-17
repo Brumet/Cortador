@@ -95,6 +95,36 @@ def pieces_csv(result: SliceResult) -> str:
     return buf.getvalue()
 
 
+def slicer_settings(result: SliceResult, line_width: float = 0.4) -> str:
+    """Ajustes recomendados del laminador para una pieza solidificada."""
+    cfg = result.config
+    pared = float(cfg.wall)
+    perimetros = max(2, int(round(pared / max(line_width, 0.05))))
+    lineas = [
+        "AJUSTES DEL LAMINADOR (Cura, PrusaSlicer, Bambu Studio, Orca...)",
+        "=" * 62,
+        "",
+        f"Las piezas ya vienen con la pared solidificada a {pared:g} mm, asi que el",
+        "laminador NO tiene que rellenar nada: solo recorrer perimetros.",
+        "",
+        f"  Relleno (infill) . . . . . . . 0 %",
+        f"  Perimetros / paredes . . . . . {perimetros}    (= {pared:g} mm / {line_width:g} mm de linea)",
+        f"  Ancho de linea . . . . . . . . {line_width:g} mm",
+        "  Capas superiores e inferiores  las que uses normalmente (4-5)",
+        "  Soportes . . . . . . . . . . . solo si la pieza los pide de verdad",
+        "",
+        "Si tu laminador usa 'grosor de pared' en vez de numero de perimetros,",
+        f"ponlo en {pared:g} mm y el resto lo calcula solo.",
+        "",
+        "Comprueba en la vista previa del laminador que el interior sale hueco:",
+        "si aparece relleno, es que el perfil tiene un minimo de relleno activado.",
+        "",
+        f"Material estimado: {result.hollow_volume / 1e6:.1f} litros"
+        f" (macizo serian {result.solid_volume / 1e6:.1f} litros).",
+    ]
+    return "\n".join(lineas) + "\n"
+
+
 def assembly_guide(result: SliceResult, model_name: str = "modelo") -> str:
     """Guia de armado en Markdown: que pieza va con cual y en que orden."""
     cfg = result.config
@@ -125,6 +155,8 @@ def assembly_guide(result: SliceResult, model_name: str = "modelo") -> str:
         if result.solid_volume > 0:
             from .hollow import savings
             lines.append(f"- Material: {savings(result.solid_volume, result.hollow_volume)}")
+        lines.append("- **Imprime con relleno al 0 %**: la pared ya esta solidificada. "
+                     "Mira `AJUSTES_LAMINADOR.txt`.")
     if cfg.kerf:
         lines.append(f"- Holgura entre piezas (kerf): {cfg.kerf:g} mm")
     if cfg.joinery.mode != "none":
@@ -335,6 +367,12 @@ def export_result(result: SliceResult,
     with open(csv_path, "w", encoding="utf-8") as fh:
         fh.write(pieces_csv(result))
     written.append(csv_path)
+
+    if cfg.hollow:
+        ajustes_path = os.path.join(outdir, "AJUSTES_LAMINADOR.txt")
+        with open(ajustes_path, "w", encoding="utf-8") as fh:
+            fh.write(slicer_settings(result))
+        written.append(ajustes_path)
 
     guide_path = os.path.join(outdir, "GUIA_DE_ARMADO.md")
     with open(guide_path, "w", encoding="utf-8") as fh:

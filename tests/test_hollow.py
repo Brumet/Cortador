@@ -269,3 +269,39 @@ def test_tambien_se_limpian_las_motas_en_macizo():
         assert medidas[1] >= 6.0, f"{pieza.name}: {pieza.size}"
     # y no debe explotar en cientos de trozos
     assert res.count < 40
+
+
+def test_una_pieza_hueca_no_se_parte_en_dos():
+    """La piel y la camara interior son una sola pieza, no dos."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import _reunir_cavidades, slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=80)
+    res = slice_model(esfera, SliceConfig(printer=PrinterSpec(100, 100, 100),
+                                          hollow=True, wall=4.0,
+                                          labels=LabelOptions(enabled=False)))
+    assert res.count == 8                    # ocho octantes, no dieciseis
+    for pieza in res.pieces:
+        assert pieza.mesh.is_watertight
+        assert pieza.mesh.volume > 0         # el hueco no cuenta como pieza
+
+    # y la funcion por separado
+    hueca = res.pieces[0].mesh
+    partes = hueca.split(only_watertight=False)
+    assert len(partes) == 2                  # piel + camara
+    assert len(_reunir_cavidades(partes)) == 1
+
+
+def test_se_descartan_las_rebabas_finas():
+    """Un resto de corte de decimas de milimetro no es una pieza."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150)
+    cfg = SliceConfig(printer=PrinterSpec(100, 100, 100), hollow=True, wall=3.0,
+                      min_piece=5.0, labels=LabelOptions(enabled=False))
+    res = slice_model(esfera, cfg)
+    for pieza in res.pieces:
+        assert min(float(v) for v in pieza.size) >= 0.8, f"{pieza.name}: {pieza.size}"

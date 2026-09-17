@@ -16,7 +16,8 @@ from . import joinery as jn
 from .hollow import hollow_mesh, hollow_region, hollow_slab, limpiar, savings
 from .font import text_size
 from .labels import apply_label
-from .meshio import apply_units_and_scale, is_empty, mesh_stats, weld_bodies
+from .meshio import apply_units_and_scale, is_empty, mesh_stats
+from .repair import auto_repair
 from .planner import CutPlan, plan_cuts
 
 Progress = Optional[Callable[[int, int, str], None]]
@@ -102,19 +103,15 @@ def slice_model(mesh: trimesh.Trimesh,
     cfg.validate()
     source_stats = mesh_stats(mesh)
     work = apply_units_and_scale(mesh, cfg.units, cfg.scale, cfg.target_size, cfg.target_axis)
-    bodies = int(work.body_count)
-    if cfg.weld and bodies > 1:
-        welded = weld_bodies(work)
-        if welded is not work:
-            work = welded
+    # sellar la malla aqui dentro, pase lo que pase: de esto dependen el
+    # solidificado y el corte booleano de respaldo
+    work, informe = auto_repair(work, weld=cfg.weld)
+    bodies = int(informe.cuerpos_antes)
     prepared_stats = mesh_stats(work)
     plan = plan_cuts(work.bounds, cfg)
     warnings = list(plan.warnings)
-    if cfg.weld and bodies > 1:
-        warnings.append(
-            f"El modelo tenia {bodies} cuerpos sueltos o superpuestos: se han "
-            "fundido en un solido antes de cortar."
-        )
+    if informe.cambiada:
+        warnings.append(informe.resumen())
     if not work.is_watertight:
         warnings.append(
             "La malla de entrada no es estanca; los cortes pueden dejar caras "
@@ -128,11 +125,6 @@ def slice_model(mesh: trimesh.Trimesh,
     report(0, 1, "Preparando el modelo")
 
     volumen_macizo = float(work.volume) if work.is_volume else 0.0
-    if cfg.hollow and cfg.mode == "chunks":
-        report(0, 1, "Vaciando el interior")
-        work, aviso = hollow_mesh(work, cfg.wall)
-        if aviso:
-            warnings.append(aviso)
 
     total_steps = plan.total_cells
     report(0, total_steps, "Cortando")
@@ -144,6 +136,13 @@ def slice_model(mesh: trimesh.Trimesh,
 
     if cfg.hollow and cfg.mode == "slabs" and cfg.slab_style == "solid":
         raw = _hollow_slabs(raw, plan, cfg, report)
+    elif cfg.hollow and cfg.mode == "chunks":
+        raw, fallos = _hollow_chunks(raw, cfg, report)
+        if fallos:
+            warnings.append(
+                f"{fallos} trozo(s) no se han podido vaciar y quedan macizos; "
+                "el resto si. Suele pasar en zonas con recovecos muy cerrados."
+            )
 
     pieces: List[Piece] = []
     descartadas: List[float] = []
@@ -238,6 +237,39 @@ def _build_chunks(mesh: trimesh.Trimesh,
     return out
 
 
+def _reunir_cavidades(trozos: Sequence[trimesh.Trimesh]) -> List[trimesh.Trimesh]:
+    """Devuelve las piezas reales, con sus huecos interiores dentro.
+
+    Al partir una pieza vaciada en componentes salen dos superficies: la piel
+    de fuera y la del hueco. No son dos piezas: son una pieza con una camara
+    dentro. Aqui se distingue por el signo del volumen y se vuelven a juntar.
+    """
+    solidos, cavidades = [], []
+    for trozo in trozos:
+        try:
+            volumen = float(trozo.volume)
+        except Exception:
+            volumen = 0.0
+        (solidos if volumen >= 0 else cavidades).append(trozo)
+    if not cavidades:
+        return list(solidos)
+    if not solidos:
+        return list(trozos)
+
+    grupos = [[s] for s in solidos]
+    for cavidad in cavidades:
+        centro = cavidad.bounds.mean(axis=0)
+        mejor, mejor_volumen = None, None
+        for i, solido in enumerate(solidos):
+            lo, hi = solido.bounds
+            if np.all(centro >= lo - 1e-6) and np.all(centro <= hi + 1e-6):
+                volumen = float(np.prod(hi - lo))
+                if mejor_volumen is None or volumen < mejor_volumen:
+                    mejor, mejor_volumen = i, volumen
+        grupos[mejor if mejor is not None else 0].append(cavidad)
+    return [g[0] if len(g) == 1 else trimesh.util.concatenate(g) for g in grupos]
+
+
 def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
     """Descarta esquirlas: trozos tan pequenos que no se pueden fabricar.
 
@@ -245,9 +277,12 @@ def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
     inservible aunque mida 25 mm de largo.
     """
     medidas = sorted(float(v) for v in malla.extents)
-    if medidas[0] < 0.05:
-        return False          # una cara suelta, sin grosor: no es una pieza
     minimo = float(cfg.min_piece)
+    # por debajo de dos lineas de extrusion no hay pieza que imprimir, solo
+    # una rebaba del corte
+    grosor_minimo = 0.8 if minimo > 0 else 0.05
+    if medidas[0] < grosor_minimo:
+        return False
     if minimo <= 0:
         return True
     return medidas[1] >= minimo
@@ -272,6 +307,7 @@ def _separar_islas(base: str,
     if len(trozos) < 2:
         return [(base, malla, outline)] if _es_util(malla, cfg) else []
 
+    trozos = _reunir_cavidades(trozos)
     utiles = []
     for trozo in trozos:
         if is_empty(trozo):
@@ -314,6 +350,28 @@ def _recortar_contorno(outline, trozo: trimesh.Trimesh):
     if not dentro:
         return None
     return merge_polygons(dentro)
+
+
+def _hollow_chunks(raw, cfg: SliceConfig, report):
+    """Solidifica cada trozo por separado: deja la piel y vacia el interior.
+
+    Hacerlo trozo a trozo, y no sobre el modelo entero, es mucho mas robusto:
+    cada malla es pequena, el desplazamiento de la superficie se porta bien y,
+    si alguna falla, solo esa queda maciza en vez de arruinar todo el trabajo.
+    """
+    salida = []
+    fallos = 0
+    total = len(raw)
+    for i, (index, malla, outline) in enumerate(raw, start=1):
+        report(i, total, "Solidificando la piel")
+        if malla is None:
+            salida.append((index, malla, outline))
+            continue
+        hueca, aviso = hollow_mesh(malla, cfg.wall)
+        if aviso is not None and hueca is malla:
+            fallos += 1
+        salida.append((index, hueca, outline))
+    return salida, fallos
 
 
 def _hollow_slabs(raw, plan: CutPlan, cfg: SliceConfig, report):

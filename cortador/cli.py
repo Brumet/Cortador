@@ -81,9 +81,11 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
                         help="no partir las laminas aunque no quepan en la maquina")
     parser.add_argument("--divisiones", type=parse_divisions, default=None, metavar="NxNxN",
                         help="forzar el numero de divisiones por eje (usa '-' para automatico)")
-    parser.add_argument("--hueco", action="store_true",
-                        help="vaciar el interior y dejar solo la piel del modelo")
-    parser.add_argument("--pared", type=float, default=3.0,
+    parser.add_argument("--hueco", "--solidificar", action="store_true", dest="hueco",
+                        help="solidificar la piel del modelo y vaciar el interior "
+                             "(como el Solidify de Blender)")
+    parser.add_argument("--pared", "--espesor-malla", type=float, default=3.0,
+                        dest="pared",
                         help="espesor de esa piel en mm (por defecto 3)")
     parser.add_argument("--sin-tapas", action="store_true",
                         help="vaciar tambien la primera y la ultima lamina")

@@ -483,9 +483,28 @@ $('modo').querySelectorAll('button').forEach((b) => {
   });
 });
 $('hueco').addEventListener('change', () => {
-  $('opciones-hueco').hidden = !$('hueco').checked;
+  $('opciones-hueco').style.opacity = $('hueco').checked ? '1' : '0.45';
+  $('opciones-hueco').style.pointerEvents = $('hueco').checked ? '' : 'none';
   actualizarPlan();
 });
+
+// ayudante: espesor de pared a partir de los perimetros del laminador
+function pintarPerimetros() {
+  const n = Math.max(1, Math.round(num('perimetros', 4)));
+  const linea = num('linea', 0.4);
+  const total = n * linea;
+  $('pista-perimetros').textContent =
+    `${n} perimetros de ${linea} mm = ${total.toFixed(2)} mm de pared.`;
+  return total;
+}
+$('btn-perimetros').addEventListener('click', () => {
+  $('pared').value = pintarPerimetros().toFixed(2);
+  actualizarPlan();
+});
+['perimetros', 'linea'].forEach((id) => {
+  $(id).addEventListener('input', pintarPerimetros);
+});
+pintarPerimetros();
 $('espigas').addEventListener('change', () => {
   $('opciones-espigas').hidden = $('espigas').value === 'none';
 });
