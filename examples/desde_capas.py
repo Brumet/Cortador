@@ -40,7 +40,7 @@ def mesh_from_layers(datos, altura_final=None):
             if poligono.area <= 0:
                 continue
             try:
-                trozo = trimesh.creation.extrude_polygon(poligono, paso * 1.02)
+                trozo = trimesh.creation.extrude_polygon(poligono, paso * 1.35)
             except Exception:
                 continue
             trozo.apply_translation([0.0, 0.0, i * paso])

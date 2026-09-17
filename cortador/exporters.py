@@ -315,12 +315,17 @@ def export_result(result: SliceResult,
     pieces_dir = os.path.join(outdir, "piezas")
     os.makedirs(pieces_dir, exist_ok=True)
     written: List[str] = []
+    revisar: List[str] = []
 
     for i, piece in enumerate(result.pieces):
         path = os.path.join(pieces_dir, f"{safe_name(piece.name)}.{mesh_format}")
-        malla = piece.mesh
+        malla = piece.mesh.copy()
+        malla.merge_vertices()
+        malla.update_faces(malla.nondegenerate_faces())
+        malla.remove_unreferenced_vertices()
+        if not malla.is_watertight:
+            revisar.append(piece.name)
         if place_at_origin:
-            malla = malla.copy()
             malla.apply_translation(-piece.mesh.bounds[0])
         malla.export(path)
         written.append(path)
@@ -356,9 +361,17 @@ def export_result(result: SliceResult,
             fh.write(f"Imprime {result.dowels} espigas de este archivo.\n")
         written.append(os.path.join(dowel_dir, "LEEME.txt"))
 
+    if revisar:
+        result.warnings.append(
+            f"{len(revisar)} pieza(s) tienen superficies que se tocan y el laminador "
+            "puede pedir repararlas (todos lo hacen solos). Suele pasar con mallas "
+            "reconstruidas o escaneadas."
+        )
+
     manifest_path = os.path.join(outdir, "cortador.json")
     manifest = result.manifest()
     manifest["piezas_en_el_origen"] = bool(place_at_origin)
+    manifest["piezas_a_revisar"] = list(revisar)
     with open(manifest_path, "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, ensure_ascii=False)
     written.append(manifest_path)

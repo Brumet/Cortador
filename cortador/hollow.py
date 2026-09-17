@@ -150,20 +150,47 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         return mesh, (f"La pared de {wall:g} mm no cabe en un modelo de "
                       f"{grosor_minimo:.1f} mm de grueso: se deja macizo.")
 
-    interior = _superficie_interior(mesh, wall)
-    if interior is None:
-        return mesh, "No se han podido calcular las normales para vaciar el modelo."
+    # se prueba con el espesor pedido y, si la pieza no admite tanto, con algo
+    # menos: mas vale una pared un poco mas fina que una pieza rota
+    # se prueba con el espesor pedido y, si la pieza no lo admite, con algo menos.
+    # Se prefiere el resultado que ademas queda cerrado al soldar los vertices,
+    # que es como lo vera el laminador, pero no se descarta uno valido por eso.
+    reserva = None
+    for factor in (1.0, 0.75, 0.5):
+        interior = _superficie_interior(mesh, wall * factor)
+        if interior is None:
+            return mesh, "No se han podido calcular las normales para vaciar el modelo."
+        cascara = boolean_op("difference", mesh, interior)
+        if cascara is None:
+            continue
+        cascara = _soldar(cascara)
+        proporcion = float(cascara.volume) / float(mesh.volume)
+        if not (0.005 < proporcion < 0.995):
+            continue
+        if cascara.is_watertight:
+            return cascara, None
+        if reserva is None:
+            reserva = cascara
+    if reserva is not None:
+        return reserva, None
+    return mesh, ("Este trozo no admite el vaciado (recovecos muy cerrados o "
+                  "paredes mas finas que el espesor): se deja macizo.")
 
-    cascara = boolean_op("difference", mesh, interior)
-    if cascara is None or not cascara.is_volume:
-        return mesh, ("El vaciado 3D ha fallado en este modelo: se corta macizo. "
-                      "Prueba el modo laminas, que vacia por rebanadas y nunca falla.")
 
-    proporcion = float(cascara.volume) / float(mesh.volume)
-    if not (0.005 < proporcion < 0.995):
-        return mesh, ("El vaciado 3D no ha dado un resultado creible en este "
-                      "modelo: se corta macizo.")
-    return cascara, None
+def _soldar(malla: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Deja la malla como la vera el laminador: vertices unidos y sin basura.
+
+    Es importante comprobar la estanqueidad DESPUES de soldar: en memoria dos
+    superficies que se tocan parecen cerradas cada una por su lado, pero al
+    guardarlas en STL se funden y aparece la arista compartida por cuatro caras
+    que hace que el laminador se queje.
+    """
+    limpia = malla.copy()
+    limpia.merge_vertices()
+    limpia.update_faces(limpia.nondegenerate_faces())
+    limpia.update_faces(limpia.unique_faces())
+    limpia.remove_unreferenced_vertices()
+    return limpia
 
 
 def hollow_region(region, wall: float, tab_size=None, minimo: float = 5.0):

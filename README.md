@@ -25,8 +25,8 @@ terminado** y **cuanto mide tu impresora**, y Cortador hace dos cosas:
 2. **Corta el resultado en trozos del tamano de tu impresora**. Siempre. Ninguna
    pieza se sale de la cama.
 
-Con un gorila de 1,80 m en una Ender 3: de **1.024 litros macizo a 91 litros**
-(91 % menos de material y de horas de maquina), en 308 piezas que caben todas.
+Con un gorila de 1,80 m en una Ender 3: de **1.024 litros macizo a 22 litros**
+(98 % menos de material y de horas de maquina), en 305 piezas que caben todas.
 
 Cada pieza sale **marcada con su nombre grabado** y, si quieres, con **pasadores
 de alineacion**, para que luego puedas armar el modelo entero sin volverte loco.
@@ -155,7 +155,7 @@ que el interior deja de ser macizo.
    ###################     --->    ###             ###
    ###################             ###             ###
    ###################             ###################
-      1.024 litros                     91 litros
+      1.024 litros                     22 litros
 ```
 
 Despues, **el corte se hace siempre al tamano de tu maquina**: los trozos salen
@@ -184,7 +184,8 @@ Cada trozo se solidifica **por separado**, despues de cortarlo. Asi la malla de
 trabajo siempre es pequena, el desplazamiento de la superficie se porta bien y,
 si un trozo con recovecos muy cerrados no admite el vaciado, solo ese queda
 macizo (te lo dice) en vez de arruinar el trabajo entero. En el gorila de 1,80 m
-fallan 11 de 308.
+fallan 7 de 305. Si un trozo no admite todo el espesor pedido, se prueba con
+algo menos antes de rendirse.
 
 - Donde el modelo es mas fino que dos veces el espesor, la pieza se queda maciza
   sola: nunca salen piezas de aire.
@@ -400,6 +401,9 @@ export_result(resultado, "salida/", mesh_format="stl")
   macizo (se avisa). En el gorila de 1,80 m fallan 11 de 308.
 - El interior de cada trozo queda como una camara cerrada. Para FDM es justo lo
   que se quiere; para resina habria que anadir agujeros de drenaje a mano.
+- En mallas reconstruidas o escaneadas puede haber superficies que se tocan: las
+  piezas salen bien, pero el laminador pedira "reparar" al abrirlas (lo hace
+  solo). Cortador te dice cuantas y cuales.
 
 ## Desarrollo
 
