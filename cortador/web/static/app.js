@@ -603,3 +603,53 @@ lienzo.addEventListener('drop', (e) => cargarArchivo(e.dataTransfer.files[0]));
 fetch('/api/version').then((r) => r.json())
   .then((d) => { $('version').textContent = 'v' + d.version; })
   .catch(() => { /* sin version, da igual */ });
+
+/* ------------------------------------------------------------- propina
+   Solo aparece si el proyecto tiene canales configurados: si no hay
+   ninguno, aqui no se ve nada y nadie tiene que cerrar ningun aviso. */
+fetch('/api/apoyo').then((r) => r.json())
+  .then((d) => {
+    if (!d.hay) return;
+    const boton = $('btn-apoyo');
+    const lista = $('apoyo-lista');
+    $('apoyo-mensaje').textContent = d.mensaje;
+    lista.innerHTML = '';
+    d.canales.forEach((canal) => {
+      const li = document.createElement('li');
+      const info = document.createElement('div');
+      const titulo = document.createElement('b');
+      titulo.textContent = canal.nombre;
+      info.appendChild(titulo);
+      const detalle = document.createElement('span');
+      detalle.textContent = canal.tipo === 'copiar'
+        ? canal.valor + (canal.nota ? ' · ' + canal.nota : '')
+        : (canal.nota || canal.valor);
+      info.appendChild(detalle);
+      li.appendChild(info);
+
+      if (canal.tipo === 'enlace') {
+        const a = document.createElement('a');
+        a.className = 'boton pequeno';
+        a.href = canal.valor;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = 'Abrir';
+        li.appendChild(a);
+      } else {
+        const b = document.createElement('button');
+        b.className = 'boton pequeno';
+        b.type = 'button';
+        b.textContent = 'Copiar';
+        b.addEventListener('click', () => {
+          navigator.clipboard.writeText(canal.valor)
+            .then(() => { b.textContent = 'Copiado'; })
+            .catch(() => { b.textContent = canal.valor; });
+        });
+        li.appendChild(b);
+      }
+      lista.appendChild(li);
+    });
+    boton.hidden = false;
+    boton.addEventListener('click', () => $('dlg-apoyo').showModal());
+  })
+  .catch(() => { /* sin propina, la app funciona igual */ });

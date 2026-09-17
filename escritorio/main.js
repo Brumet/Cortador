@@ -108,6 +108,12 @@ function lanzarMotor (puerto) {
   return proceso
 }
 
+function esInterno (url) {
+  return url.startsWith('file://') ||
+         /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(url)
+}
+
+
 function crearVentana () {
   ventana = new BrowserWindow({
     width: 1440,
@@ -123,6 +129,19 @@ function crearVentana () {
                       devTools: !app.isPackaged }
   })
   ventana.setMenuBarVisibility(false)
+
+  // Los enlaces de fuera (el repositorio, una propina) se abren en el
+  // navegador del sistema: la ventana de Cortador es para Cortador.
+  ventana.webContents.setWindowOpenHandler(({ url }) => {
+    if (!esInterno(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  ventana.webContents.on('will-navigate', (evento, url) => {
+    if (esInterno(url)) return
+    evento.preventDefault()
+    shell.openExternal(url)
+  })
+
   ventana.loadFile('espera.html')
   ventana.on('closed', () => { ventana = null })
 }

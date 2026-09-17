@@ -1,0 +1,13 @@
+# Botón "Sponsor" de GitHub para este repositorio.
+#
+# Mientras todo esté comentado, GitHub no muestra ningún botón: el repo se ve
+# exactamente igual que hoy. Para activarlo, descomenta la línea que
+# corresponda y pon el usuario o el enlace.
+#
+# github: [Brumet]                      # requiere darse de alta en GitHub Sponsors
+# ko_fi: brumet                         # solo el nombre de usuario
+# buy_me_a_coffee: brumet
+# custom: ["https://paypal.me/brumet", "https://brumet.co/apoyar"]
+#
+# Lo que se muestra DENTRO de la app (Nequi, PayPal, lo que sea) se configura
+# aparte, en cortador/apoyo.py.

@@ -88,6 +88,14 @@ def create_app() -> FastAPI:
         from .. import __version__
         return {"version": __version__, "windows": is_windows()}
 
+    @app.get("/api/apoyo")
+    def apoyo():
+        """Formas de dar una propina, si el proyecto tiene alguna configurada."""
+        from ..apoyo import MENSAJE, canales
+        lista = canales()
+        return {"hay": bool(lista), "mensaje": MENSAJE if lista else "",
+                "canales": lista}
+
     @app.post("/api/modelo")
     async def subir_modelo(archivo: UploadFile = File(...)):
         _cleanup_old_jobs()

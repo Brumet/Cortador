@@ -353,3 +353,24 @@ input[type=range]::-moz-range-thumb {
   .archivo { order: 3; width: 100%; }
   .vacio h1 { font-size: 22px; }
 }
+
+/* -------------------------------------------------------------- propina */
+.enlace-apoyo { display: block; margin-top: 6px; padding: 0; border: 0;
+                background: none; font: inherit; font-size: 11px;
+                color: var(--acento); cursor: pointer; }
+.enlace-apoyo:hover { text-decoration: underline; }
+
+.dialogo { border: 0; border-radius: var(--radio); padding: 24px 26px 20px;
+           max-width: 420px; background: var(--superficie); color: var(--texto);
+           box-shadow: var(--sombra); }
+.dialogo::backdrop { background: rgba(0, 0, 0, .45); }
+.dialogo h2 { margin: 0 0 8px; font-size: 18px; }
+.dialogo p { margin: 0 0 12px; font-size: 13px; line-height: 1.55; }
+.apoyo-lista { list-style: none; margin: 0 0 14px; padding: 0;
+               display: flex; flex-direction: column; gap: 8px; }
+.apoyo-lista li { display: flex; align-items: center; justify-content: space-between;
+                  gap: 12px; padding: 10px 12px; border: 1px solid var(--borde);
+                  border-radius: var(--radio-s); background: var(--superficie-2); }
+.apoyo-lista b { font-size: 13px; }
+.apoyo-lista span { display: block; font-size: 12px; color: var(--tenue); }
+.apoyo-lista .boton { flex: 0 0 auto; }

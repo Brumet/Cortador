@@ -252,7 +252,9 @@
       <p class="pista">Asi cada STL cae centrado en la cama del laminador.</p>
     </section>
 
-    <footer class="pie">Cortador <span id="version"></span> · by <b>Brumet</b> · codigo libre (MIT)</footer>
+    <footer class="pie">Cortador <span id="version"></span> · by <b>Brumet</b> · codigo libre (MIT)
+      <button type="button" class="enlace-apoyo" id="btn-apoyo" hidden>Apoyar el proyecto</button>
+    </footer>
   </aside>
 
   <!-- ------------------------------------------------ visor -->
@@ -322,5 +324,14 @@
 </main>
 
 <script type="module" src="/static/app.js"></script>
+<dialog id="dlg-apoyo" class="dialogo">
+  <h2>Apoyar el proyecto</h2>
+  <p id="apoyo-mensaje" class="tenue"></p>
+  <ul id="apoyo-lista" class="apoyo-lista"></ul>
+  <p class="tenue pequeno">Cortador es gratis y de codigo libre. Nada de esto
+     desbloquea funciones: todo lo que hace la app lo hace para todos.</p>
+  <form method="dialog"><button class="boton">Cerrar</button></form>
+</dialog>
+
 </body>
 </html>
