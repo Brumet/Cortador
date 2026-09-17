@@ -65,8 +65,22 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("-i", "--impresora", type=parse_volume, default=parse_volume("220x220x250"),
                         metavar="AxBxC",
                         help="volumen util de la maquina en mm (por defecto 220x220x250)")
-    parser.add_argument("--margen", type=float, default=0.0,
+    parser.add_argument("--margen", type=float, default=None,
                         help="margen de seguridad descontado a cada eje (mm)")
+    parser.add_argument("--perfil", default=None, metavar="ID",
+                        help="perfil de maquina listo (flsun_v400, flsun_t1, "
+                             "flsun_sr, bambu_a1, resina_grande...); "
+                             "usa --perfiles para verlos todos")
+    parser.add_argument("--boquilla", type=float, default=None,
+                        help="diametro de la boquilla (0.4, 0.6, 0.8, 1.0); "
+                             "de aqui sale el espesor de piel bien calculado")
+    parser.add_argument("--perimetros", type=int, default=None,
+                        help="perimetros de piel: la pared se ajusta a un "
+                             "multiplo exacto del ancho de linea")
+    parser.add_argument("--girar", default=None, metavar="X,Y,Z",
+                        help="girar el modelo antes de cortar, en grados")
+    parser.add_argument("--apoyar-base", action="store_true",
+                        help="apoyar sola la cara mas grande sobre la cama")
     parser.add_argument("--modo", choices=sorted(MODE_MAP), default="trozos",
                         help="'trozos' para dividir por capacidad, 'laminas' para cortar por capas")
     parser.add_argument("--espesor", type=float, default=5.0,
@@ -133,8 +147,30 @@ def _add_marking(parser: argparse.ArgumentParser) -> None:
 
 
 def build_config(args) -> SliceConfig:
-    printer = args.impresora
-    printer.clearance = float(args.margen)
+    base = None
+    if getattr(args, "perfil", None):
+        from .perfiles import perfil as buscar_perfil
+        base = buscar_perfil(args.perfil)
+        printer = PrinterSpec(**vars(base.printer))
+    else:
+        printer = args.impresora
+    if args.margen is not None:
+        printer.clearance = float(args.margen)
+    if getattr(args, "boquilla", None):
+        printer.nozzle = float(args.boquilla)
+
+    pared = args.pared
+    if base is not None and pared == 3.0:      # el usuario no la toco
+        pared = base.wall
+    if getattr(args, "perimetros", None):
+        pared = printer.wall_for(args.perimetros)
+
+    giro = (0.0, 0.0, 0.0)
+    if getattr(args, "girar", None):
+        partes = str(args.girar).replace(";", ",").split(",")
+        if len(partes) != 3:
+            raise SystemExit("El giro se indica como X,Y,Z (por ejemplo 0,0,90)")
+        giro = tuple(float(v or 0) for v in partes)
     labels = LabelOptions(
         enabled=not args.sin_marcas,
         style=STYLE_MAP[args.marca_estilo],
@@ -161,12 +197,15 @@ def build_config(args) -> SliceConfig:
         split_slabs_to_fit=not args.no_subdividir_laminas,
         divisions=args.divisiones,
         hollow=args.hueco,
-        wall=args.pared,
+        wall=pared,
+        rotation=giro,
+        auto_base=bool(getattr(args, "apoyar_base", False)),
         solid_caps=not args.sin_tapas,
         label_tab=not args.sin_lengueta,
         split_islands=not args.sin_separar_islas,
-        min_piece=args.pieza_minima,
-        kerf=args.kerf,
+        min_piece=(base.min_piece if base is not None and args.pieza_minima == 5.0
+                   else args.pieza_minima),
+        kerf=(base.kerf if base is not None and args.kerf == 0.0 else args.kerf),
         scale=args.escala,
         target_size=args.tamano,
         target_axis=args.tamano_eje,
@@ -308,6 +347,20 @@ def cmd_repair(args) -> int:
     return 0
 
 
+def cmd_perfiles(args) -> int:
+    """Lista las maquinas que ya vienen configuradas."""
+    from .perfiles import PERFILES
+    print(f"{'id':16s} {'maquina':28s} {'cama':9s} {'pieza mayor (mm)':20s} pared")
+    print("-" * 86)
+    for p in PERFILES:
+        u = p.printer.usable()
+        forma = "redonda" if p.printer.is_round() else "cuadrada"
+        print(f"{p.id:16s} {p.nombre:28s} {forma:9s} "
+              f"{u[0]:5.0f} x {u[1]:3.0f} x {u[2]:3.0f}      {p.wall:4.2f} mm")
+    print("\nUsalo con:  cortador cortar modelo.stl --perfil flsun_v400")
+    return 0
+
+
 def cmd_app(args) -> int:
     """Abre Cortador como aplicacion de escritorio, en su propia ventana."""
     from .desktop import FALLO_MUDO, backend_disponible, run
@@ -384,6 +437,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep.add_argument("--windows", action="store_true",
                        help="abrir el modelo en 3D Builder de Windows para repararlo a mano")
     p_rep.set_defaults(func=cmd_repair)
+
+    p_perf = sub.add_parser("perfiles", help="ver las maquinas ya configuradas")
+    p_perf.set_defaults(func=cmd_perfiles)
 
     p_app = sub.add_parser("app", help="abrir Cortador en su propia ventana (escritorio)")
     p_app.add_argument("--puerto", type=int, default=8000)

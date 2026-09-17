@@ -5,6 +5,7 @@ Todas las medidas estan en milimetros salvo que se indique lo contrario.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Sequence
 
@@ -33,13 +34,60 @@ class PrinterSpec:
     z: float = 200.0
     #: margen de seguridad que se descuenta a cada eje (adherencia, brim, etc.)
     clearance: float = 0.0
+    #: 'rect' = cama cuadrada o rectangular; 'round' = cama redonda (delta)
+    shape: str = "rect"
+    #: diametro de la cama cuando shape == 'round'
+    diameter: float = 0.0
+    #: boquilla montada; de ella sale el ancho de linea y el espesor de piel
+    nozzle: float = 0.4
+    #: 'fdm' (filamento) o 'resina'
+    technology: str = "fdm"
+    #: nombre del perfil, solo para mostrarlo
+    name: str = ""
 
     def usable(self) -> tuple:
+        """Caja util donde cabe una pieza.
+
+        En una cama redonda (las FLSUN son delta) no sirve el diametro: lo que
+        cabe de verdad es el cuadrado inscrito, diametro / raiz de 2. Por eso
+        una V400 de 300 mm admite piezas de unos 212 mm de lado, no de 300.
+        """
+        if self.is_round():
+            lado = self.diameter / math.sqrt(2.0)
+            return (
+                max(lado - 2 * self.clearance, 1e-6),
+                max(lado - 2 * self.clearance, 1e-6),
+                max(self.z - 2 * self.clearance, 1e-6),
+            )
         return (
             max(self.x - 2 * self.clearance, 1e-6),
             max(self.y - 2 * self.clearance, 1e-6),
             max(self.z - 2 * self.clearance, 1e-6),
         )
+
+    def is_round(self) -> bool:
+        return str(self.shape).lower() in ("round", "redonda", "circular", "delta") \
+            and self.diameter > 0
+
+    def line_width(self) -> float:
+        """Ancho de linea que va a usar el laminador con esa boquilla.
+
+        Los laminadores extruden algo mas ancho que el diametro de la boquilla
+        (un 5-10 %): con eso las paredes salen solidas y sin huecos.
+        """
+        return round(max(self.nozzle, 0.05) * 1.05, 3)
+
+    def wall_for(self, perimeters: int = 4) -> float:
+        """Espesor de piel que es multiplo exacto del ancho de linea.
+
+        Si la pared no es multiplo, el laminador deja una franja que no puede
+        rellenar con perimetros y la acaba tapando con relleno o con nada.
+        """
+        return round(max(1, int(perimeters)) * self.line_width(), 2)
+
+    def perimeters_for(self, wall: float) -> int:
+        """Cuantos perimetros caben en esa pared con la boquilla puesta."""
+        return max(1, int(round(float(wall) / self.line_width())))
 
     def fits(self, size: Sequence[float]) -> bool:
         u = self.usable()
@@ -85,6 +133,11 @@ class JoineryOptions:
     count: int = 2
     #: separacion minima al borde de la pieza
     margin: float = 3.0
+    #: ajustar solo el tamano del pasador al espesor de la lamina y de la
+    #: pared: en una lamina de 4 mm no cabe una espiga de 6 mm de profundidad
+    auto: bool = True
+    #: en laminas, repartir mas puntos a lo largo del contorno
+    slab_count: int = 4
 
 
 @dataclass
@@ -133,6 +186,11 @@ class SliceConfig:
     # --- comunes ------------------------------------------------------
     #: separacion entre piezas (holgura de ensamble); se reparte a ambos lados del corte
     kerf: float = 0.0
+    #: giro del modelo (grados) antes de cortar, en el orden X, Y, Z. Sirve
+    #: para apoyar la figura como conviene: de pie, tumbada, girada 90 grados
+    rotation: Sequence[float] = (0.0, 0.0, 0.0)
+    #: apoyar automaticamente la cara mas grande sobre la cama antes de cortar
+    auto_base: bool = False
     #: escala uniforme aplicada al modelo antes de cortar
     scale: float = 1.0
     #: tamano objetivo (mm) sobre un eje; sustituye a `scale` si esta definido
@@ -193,6 +251,10 @@ class SliceConfig:
             raise ValueError("joinery.mode debe ser 'none', 'holes' o 'pins'")
         if self.kerf < 0:
             raise ValueError("El kerf no puede ser negativo")
+        if self.rotation is not None and len(tuple(self.rotation)) != 3:
+            raise ValueError("rotation necesita tres angulos (x, y, z)")
+        if self.printer.technology not in ("fdm", "resina", "resin"):
+            raise ValueError("La tecnologia debe ser 'fdm' o 'resina'")
         if self.hollow and self.wall <= 0:
             raise ValueError("El espesor de pared debe ser mayor que cero")
         axis_index(self.slab_axis)

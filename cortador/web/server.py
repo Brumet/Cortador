@@ -88,6 +88,12 @@ def create_app() -> FastAPI:
         from .. import __version__
         return {"version": __version__, "windows": is_windows()}
 
+    @app.get("/api/perfiles")
+    def perfiles():
+        """Maquinas conocidas, con su volumen util ya calculado."""
+        from ..perfiles import como_lista
+        return {"perfiles": como_lista()}
+
     @app.get("/api/apoyo")
     def apoyo():
         """Formas de dar una propina, si el proyecto tiene alguna configurada."""

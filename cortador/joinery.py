@@ -13,6 +13,45 @@ from .config import JoineryOptions
 from .geometry import EPS, boolean_op, largest_polygon, plane_transform
 
 
+def ajustar(opts: JoineryOptions,
+            espesor: float,
+            pared: float = 0.0,
+            es_lamina: bool = False) -> JoineryOptions:
+    """Encoge el pasador para que quepa de verdad en la pieza.
+
+    Un pasador de 3 mm de radio y 6 mm de profundidad no cabe en una lamina de
+    4 mm con pared de 3: o la atraviesa, o no hay material donde alojarlo. En
+    vez de renunciar al ensamble, se hace pequeno: lo que importa aqui es que
+    las laminas encajen y no se muevan, no que el pasador aguante un tiron.
+
+    `espesor` es el grosor de la pieza en el eje de la union y `pared` el de
+    la piel cuando el modelo va hueco (0 si es macizo).
+    """
+    if not opts.auto:
+        return opts
+
+    ajustado = JoineryOptions(**vars(opts))
+
+    # la caja nunca puede atravesar la pieza: se deja material de sobra
+    if espesor > 0:
+        ajustado.depth = max(0.8, min(opts.depth, espesor * 0.35))
+
+    # En una pieza hueca el pasador vive dentro de la pared, y la pared se
+    # mide a lo ancho: el punto va en el centro y a cada lado tiene que quedar
+    # radio + holgura + margen. Si no da, se avisa fuera en vez de forzarlo.
+    if pared > 0:
+        ajustado.margin = max(0.25, min(opts.margin, pared * 0.12))
+        sitio = pared / 2.0 - ajustado.margin - opts.clearance - 0.05
+        ajustado.radius = min(opts.radius, max(0.0, sitio))
+
+    # un pasador mas largo que ancho se parte al montarlo
+    ajustado.radius = min(ajustado.radius, ajustado.depth * 1.5)
+
+    if es_lamina and opts.slab_count > 0:
+        ajustado.count = max(opts.count, opts.slab_count)
+    return ajustado
+
+
 def pick_points(region,
                 count: int,
                 radius: float,

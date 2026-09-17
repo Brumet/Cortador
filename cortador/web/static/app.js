@@ -48,6 +48,37 @@ function modoActual() {
   return $('modo').querySelector('.activo').dataset.valor;
 }
 
+function formaCama() {
+  const activo = $('forma-cama').querySelector('.activo');
+  return activo ? activo.dataset.valor : 'rect';
+}
+
+/* Caja util de la maquina: en una cama redonda no cabe el diametro entero,
+   sino el cuadrado que cabe dentro (diametro / raiz de 2). */
+function cajaUtil() {
+  const margen = num('margen', 5);
+  if (formaCama() === 'round') {
+    const lado = num('diametro', 300) / Math.SQRT2 - 2 * margen;
+    return [lado, lado, num('pz-round', 410) - 2 * margen];
+  }
+  return [num('px', 220) - 2 * margen, num('py', 220) - 2 * margen,
+          num('pz', 250) - 2 * margen];
+}
+
+function anchoLinea() {
+  return Math.round(num('boquilla', 0.4) * 1.05 * 1000) / 1000;
+}
+
+function pintarUtilMaquina() {
+  const [x, y, z] = cajaUtil().map((v) => Math.max(0, v));
+  const redonda = formaCama() === 'round';
+  const linea = anchoLinea();
+  $('util-maquina').textContent =
+    `Pieza mas grande que cabe: ${x.toFixed(0)} x ${y.toFixed(0)} x ${z.toFixed(0)} mm`
+    + (redonda ? ' (el cuadrado que cabe en la cama redonda)' : '')
+    + ` · linea de ${linea.toFixed(2)} mm con esa boquilla.`;
+}
+
 function leerConfig() {
   const divisiones = $('divisiones').value.trim();
   let div = null;
@@ -58,11 +89,19 @@ function leerConfig() {
         ? null : Math.max(1, parseInt(p, 10) || 1)));
     }
   }
+  const redonda = formaCama() === 'round';
   return {
-    printer: {
+    printer: redonda ? {
+      x: num('diametro', 300), y: num('diametro', 300), z: num('pz-round', 410),
+      clearance: num('margen', 5), shape: 'round', diameter: num('diametro', 300),
+      nozzle: num('boquilla', 0.4), technology: $('tecnologia').value,
+    } : {
       x: num('px', 220), y: num('py', 220), z: num('pz', 250),
-      clearance: num('margen', 0),
+      clearance: num('margen', 5), shape: 'rect',
+      nozzle: num('boquilla', 0.4), technology: $('tecnologia').value,
     },
+    rotation: [num('giro-x', 0), num('giro-y', 0), num('giro-z', 0)],
+    auto_base: $('apoyar').checked,
     mode: modoActual(),
     slab_thickness: num('espesor', 5),
     slab_axis: $('eje').value,
@@ -97,6 +136,7 @@ function leerConfig() {
       radius: num('espiga-radio', 3),
       depth: num('espiga-prof', 6),
       count: Math.round(num('espiga-num', 2)),
+      auto: $('espiga-auto').checked,
     },
   };
 }
@@ -542,9 +582,10 @@ $('ver-rejilla').addEventListener('change', (e) => {
   visor.render();
 });
 
-['px', 'py', 'pz', 'margen', 'espesor', 'eje', 'estilo-lamina', 'ajuste-lamina',
- 'subdividir', 'kerf', 'divisiones', 'escala', 'tamano', 'tamano-eje', 'unidades',
- 'motor', 'unir', 'pared', 'tapas', 'lengueta', 'minima'].forEach((id) => {
+['px', 'py', 'pz', 'diametro', 'pz-round', 'margen', 'espesor', 'eje',
+ 'estilo-lamina', 'ajuste-lamina', 'subdividir', 'kerf', 'divisiones', 'escala',
+ 'tamano', 'tamano-eje', 'unidades', 'motor', 'unir', 'pared', 'tapas',
+ 'lengueta', 'minima', 'giro-x', 'giro-y', 'giro-z', 'apoyar'].forEach((id) => {
   $(id).addEventListener('change', actualizarPlan);
   if (['number', 'text'].includes($(id).type)) $(id).addEventListener('input', actualizarPlan);
 });
@@ -567,14 +608,101 @@ function chips(contenedor, items, accion) {
   });
 }
 
-chips('presets', [
-  { texto: 'Ender 3', v: [220, 220, 250] },
-  { texto: 'Bambu X1', v: [256, 256, 256] },
-  { texto: 'Prusa MK4', v: [250, 210, 220] },
-  { texto: 'Flsun V400', v: [300, 300, 410] },
-  { texto: 'Neptune 4 Max', v: [420, 420, 480] },
-  { texto: 'Modix 180X', v: [1800, 600, 600] },
-], (i) => { $('px').value = i.v[0]; $('py').value = i.v[1]; $('pz').value = i.v[2]; });
+/* ------------------------------------------------------- maquina */
+function ponerForma(valor) {
+  $('forma-cama').querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('activo', b.dataset.valor === valor);
+  });
+  $('medidas-rect').hidden = valor === 'round';
+  $('medidas-round').hidden = valor !== 'round';
+  pintarUtilMaquina();
+}
+
+$('forma-cama').querySelectorAll('button').forEach((b) => {
+  b.addEventListener('click', () => {
+    ponerForma(b.dataset.valor);
+    $('perfil').value = '';
+    actualizarPlan();
+  });
+});
+
+let PERFILES = [];
+
+fetch('/api/perfiles').then((r) => r.json()).then((d) => {
+  PERFILES = d.perfiles || [];
+  const sel = $('perfil');
+  PERFILES.forEach((p) => {
+    const o = document.createElement('option');
+    o.value = p.id;
+    o.textContent = p.nombre;
+    sel.appendChild(o);
+  });
+}).catch(() => { /* sin perfiles, se configura a mano */ });
+
+$('perfil').addEventListener('change', () => {
+  const p = PERFILES.find((x) => x.id === $('perfil').value);
+  if (!p) { $('nota-perfil').textContent = 'Pon las medidas de tu maquina a mano.'; return; }
+  const m = p.printer;
+  if (m.shape === 'round') {
+    ponerForma('round');
+    $('diametro').value = m.diameter;
+    $('pz-round').value = m.z;
+  } else {
+    ponerForma('rect');
+    $('px').value = m.x; $('py').value = m.y; $('pz').value = m.z;
+  }
+  $('margen').value = m.clearance;
+  $('boquilla').value = String(m.nozzle);
+  $('tecnologia').value = m.technology === 'resina' ? 'resina' : 'fdm';
+  $('pared').value = p.wall;
+  $('kerf').value = p.kerf;
+  $('minima').value = p.min_piece;
+  $('linea').value = p.linea;
+  $('perimetros').value = Math.max(1, Math.round(p.wall / p.linea));
+  $('nota-perfil').textContent = p.nota || '';
+  pintarUtilMaquina();
+  actualizarPlan();
+});
+
+/* la boquilla manda sobre el espesor de la piel: la pared tiene que ser un
+   multiplo exacto del ancho de linea o el laminador deja huecos */
+$('boquilla').addEventListener('change', () => {
+  const linea = anchoLinea();
+  $('linea').value = linea;
+  const perimetros = Math.max(1, Math.round(num('pared', 3) / linea));
+  $('perimetros').value = perimetros;
+  $('pared').value = (perimetros * linea).toFixed(2);
+  $('perfil').value = '';
+  pintarUtilMaquina();
+  actualizarPlan();
+});
+
+$('tecnologia').addEventListener('change', () => {
+  const resina = $('tecnologia').value === 'resina';
+  // en resina no hay boquilla ni perimetros: manda la rigidez de la pieza
+  $('boquilla').disabled = resina;
+  if (resina) {
+    $('pared').value = 2.1;
+    $('kerf').value = 0.05;
+    $('minima').value = 2;
+  }
+  actualizarPlan();
+});
+
+chips('giros', [
+  { texto: '90 en X', eje: 'giro-x', v: 90 },
+  { texto: '-90 en X', eje: 'giro-x', v: -90 },
+  { texto: '90 en Y', eje: 'giro-y', v: 90 },
+  { texto: '90 en Z', eje: 'giro-z', v: 90 },
+  { texto: 'sin giro', eje: null, v: 0 },
+], (i) => {
+  if (!i.eje) {
+    $('giro-x').value = 0; $('giro-y').value = 0; $('giro-z').value = 0;
+    return;
+  }
+  const actual = num(i.eje, 0);
+  $(i.eje).value = ((actual + i.v) % 360 + 360) % 360;
+});
 
 chips('alturas', [
   { texto: '30 cm', v: 300 }, { texto: '50 cm', v: 500 }, { texto: '1 m', v: 1000 },
@@ -601,6 +729,11 @@ const lienzo = document.querySelector('.lienzo');
   e.preventDefault(); lienzo.classList.remove('arrastrando');
 }));
 lienzo.addEventListener('drop', (e) => cargarArchivo(e.dataTransfer.files[0]));
+
+['px', 'py', 'pz', 'diametro', 'pz-round', 'margen'].forEach((id) => {
+  $(id).addEventListener('input', pintarUtilMaquina);
+});
+pintarUtilMaquina();
 
 fetch('/api/version').then((r) => r.json())
   .then((d) => { $('version').textContent = 'v' + d.version; })

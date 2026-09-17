@@ -71,3 +71,57 @@ def test_sin_cortadores_no_cambia_nada():
     bloque = _bloque()
     igual, nota = apply_cutters(bloque, [], "difference")
     assert igual is bloque and nota is None
+
+
+# --------------------------------------------------------------- laminas
+def test_el_pasador_se_encoge_para_caber_en_la_lamina():
+    """Una espiga de 6 mm no cabe en una lamina de 4: se hace pequena sola."""
+    from cortador.config import JoineryOptions
+    from cortador.joinery import ajustar
+
+    opts = JoineryOptions(mode="pins", radius=3.0, depth=6.0)
+    ajustado = ajustar(opts, espesor=4.0, pared=3.36, es_lamina=True)
+
+    assert ajustado.depth < 4.0 * 0.5          # nunca atraviesa la lamina
+    # el pasador vive dentro de la pared: radio + holgura + margen < media pared
+    assert ajustado.radius + ajustado.clearance + ajustado.margin <= 3.36 / 2
+    assert ajustado.count >= opts.count        # mas puntos a lo largo del anillo
+
+
+def test_sin_auto_el_pasador_se_respeta_tal_cual():
+    from cortador.config import JoineryOptions
+    from cortador.joinery import ajustar
+
+    opts = JoineryOptions(mode="pins", radius=3.0, depth=6.0, auto=False)
+    assert ajustar(opts, espesor=4.0, pared=3.0) is opts
+
+
+def test_una_pieza_maciza_conserva_el_pasador_grande():
+    from cortador.config import JoineryOptions
+    from cortador.joinery import ajustar
+
+    opts = JoineryOptions(mode="pins", radius=3.0, depth=6.0)
+    ajustado = ajustar(opts, espesor=60.0, pared=0.0)
+    assert ajustado.radius == 3.0 and ajustado.depth == 6.0
+
+
+def test_laminas_huecas_con_macho_y_hembra_de_verdad():
+    """El caso de la bota: laminas huecas que tienen que encajar entre si."""
+    import trimesh
+    from cortador.config import JoineryOptions, SliceConfig
+    from cortador.perfiles import perfil
+    from cortador.slicer import slice_model
+
+    torre = trimesh.creation.cylinder(radius=40.0, height=120.0, sections=48)
+    torre.apply_translation(-torre.bounds[0])
+
+    cfg = perfil("flsun_v400").aplicar(
+        SliceConfig(mode="slabs", slab_thickness=20.0, hollow=True))
+    cfg.joinery = JoineryOptions(mode="pins", auto=True)
+    res = slice_model(torre, cfg)
+
+    assert res.count >= 4
+    estrechas = [p.name for p in res.pieces
+                 if any("estrecha" in n for n in p.notes)]
+    assert not estrechas, estrechas
+    assert all(p.mesh.is_watertight for p in res.pieces)

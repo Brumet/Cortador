@@ -96,6 +96,57 @@ class SliceResult:
         }
 
 
+def orientar(mesh: trimesh.Trimesh, cfg: SliceConfig) -> trimesh.Trimesh:
+    """Gira el modelo antes de cortarlo.
+
+    Girar cambia como se reparten los cortes: una figura tumbada se corta en
+    otras piezas que la misma figura de pie. Se aplica en el orden X, Y, Z y,
+    al terminar, el modelo se vuelve a apoyar en el origen para que el plan de
+    corte siempre empiece en cero.
+    """
+    angulos = [float(a) for a in (cfg.rotation or (0.0, 0.0, 0.0))]
+    girado = mesh
+    if cfg.auto_base:
+        girado = apoyar_base(girado)
+    if any(abs(a) > 1e-9 for a in angulos):
+        girado = girado.copy() if girado is mesh else girado
+        for eje, angulo in enumerate(angulos):
+            if abs(angulo) < 1e-9:
+                continue
+            direccion = [0.0, 0.0, 0.0]
+            direccion[eje] = 1.0
+            girado.apply_transform(
+                trimesh.transformations.rotation_matrix(np.radians(angulo), direccion))
+    if girado is not mesh:
+        girado.apply_translation(-girado.bounds[0])
+    return girado
+
+
+def apoyar_base(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Deja hacia abajo la cara plana mas grande del modelo.
+
+    Es lo que uno hace a mano en el laminador antes de imprimir: buscar el
+    apoyo mas ancho. Si la malla no tiene caras planas claras, se queda como
+    esta en vez de inventarse un giro raro.
+    """
+    try:
+        copia = mesh.copy()
+        transform, _ = trimesh.bounds.oriented_bounds(copia)
+        copia.apply_transform(transform)
+        # oriented_bounds alinea la caja minima; dejamos el lado mas corto en Z
+        extents = copia.extents
+        eje_corto = int(np.argmin(extents))
+        if eje_corto != 2:
+            direccion = [0.0, 0.0, 0.0]
+            direccion[1 - eje_corto if eje_corto < 2 else 0] = 1.0
+            copia.apply_transform(
+                trimesh.transformations.rotation_matrix(np.pi / 2, direccion))
+        copia.apply_translation(-copia.bounds[0])
+        return copia
+    except Exception:
+        return mesh
+
+
 def slice_model(mesh: trimesh.Trimesh,
                 cfg: SliceConfig,
                 progress: Progress = None) -> SliceResult:
@@ -103,6 +154,7 @@ def slice_model(mesh: trimesh.Trimesh,
     cfg.validate()
     source_stats = mesh_stats(mesh)
     work = apply_units_and_scale(mesh, cfg.units, cfg.scale, cfg.target_size, cfg.target_axis)
+    work = orientar(work, cfg)
     # sellar la malla aqui dentro, pase lo que pase: de esto dependen el
     # solidificado y el corte booleano de respaldo
     work, informe = auto_repair(work, weld=cfg.weld)
@@ -579,24 +631,31 @@ def _apply_joinery(pieces: Sequence[Piece],
             common = largest_polygon(list(common.geoms)) if hasattr(common, "geoms") else common
             if common is None or common.is_empty:
                 continue
-            points = jn.pick_points(common, opts.count, opts.radius + opts.clearance,
-                                    opts.margin)
+            # el pasador se ajusta a lo que hay: en una lamina de 4 mm con
+            # pared de 3 no cabe una espiga de 6 mm de fondo
+            es_lamina = cfg.mode == "slabs" and axis == plan.layer_axis
+            espesor = min(float(piece.size[axis]), float(nb.size[axis]))
+            pared = float(cfg.wall) if cfg.hollow else 0.0
+            ajuste = jn.ajustar(opts, espesor, pared, es_lamina)
+
+            points = jn.pick_points(common, ajuste.count,
+                                    ajuste.radius + ajuste.clearance, ajuste.margin)
             if not points:
                 piece.notes.append(
                     f"cara {_face_key(axis, sign)} demasiado estrecha para pasadores")
                 continue
             for uv in points:
-                if opts.mode == "holes":
+                if ajuste.mode == "holes":
                     cutters[piece.name]["difference"].append(
-                        jn.hole_cylinder(axis, value_a, uv, +1, opts, plan.kerf))
+                        jn.hole_cylinder(axis, value_a, uv, +1, ajuste, plan.kerf))
                     cutters[nb.name]["difference"].append(
-                        jn.hole_cylinder(axis, value_b, uv, -1, opts, plan.kerf))
+                        jn.hole_cylinder(axis, value_b, uv, -1, ajuste, plan.kerf))
                     dowels += 1
-                else:  # pins
+                else:  # pins: macho arriba, hembra abajo
                     cutters[piece.name]["union"].append(
-                        jn.pin_cylinder(axis, value_a, uv, +1, opts, plan.kerf))
+                        jn.pin_cylinder(axis, value_a, uv, +1, ajuste, plan.kerf))
                     cutters[nb.name]["difference"].append(
-                        jn.hole_cylinder(axis, value_b, uv, -1, opts, plan.kerf))
+                        jn.hole_cylinder(axis, value_b, uv, -1, ajuste, plan.kerf))
 
     done = 0
     for piece in pieces:

@@ -106,7 +106,7 @@
           <summary>Calcular el espesor por perimetros</summary>
           <div class="rejilla3">
             <label>Perimetros <input type="number" id="perimetros" value="4" min="1" max="20" step="1"></label>
-            <label>Linea <input type="number" id="linea" value="0.4" min="0.1" step="0.05"></label>
+            <label>Linea <input type="number" id="linea" value="0.42" min="0.1" step="0.01"></label>
             <label>&nbsp;<button class="boton pequeno" id="btn-perimetros" type="button">Aplicar</button></label>
           </div>
           <p class="pista" id="pista-perimetros">4 perimetros de 0,4 mm = 1,6 mm de pared.</p>
@@ -125,17 +125,64 @@
 
     <section>
       <h2>Maquina</h2>
-      <div class="rejilla3">
+      <label class="grande">Perfil
+        <select id="perfil">
+          <option value="">Personalizada</option>
+        </select>
+      </label>
+      <p class="pista" id="nota-perfil">Elige tu maquina y se configura sola, con
+        el margen de seguridad ya puesto.</p>
+
+      <div class="segmento" id="forma-cama">
+        <button class="activo" data-valor="rect" type="button">Cama cuadrada</button>
+        <button data-valor="round" type="button">Cama redonda (delta)</button>
+      </div>
+
+      <div class="rejilla3" id="medidas-rect">
         <label>Ancho X <input type="number" id="px" value="220" min="10" step="1"></label>
         <label>Fondo Y <input type="number" id="py" value="220" min="10" step="1"></label>
         <label>Alto Z <input type="number" id="pz" value="250" min="10" step="1"></label>
       </div>
-      <div class="chips" id="presets"></div>
-      <label>Margen de seguridad
-        <div class="con-unidad">
-          <input type="number" id="margen" value="0" min="0" step="0.5"><span>mm</span>
-        </div>
-      </label>
+      <div class="rejilla3" id="medidas-round" hidden>
+        <label>Diametro <input type="number" id="diametro" value="300" min="10" step="1"></label>
+        <label>Alto Z <input type="number" id="pz-round" value="410" min="10" step="1"></label>
+        <label>&nbsp;</label>
+      </div>
+
+      <div class="rejilla3">
+        <label>Boquilla
+          <select id="boquilla">
+            <option value="0.4" selected>0,4 mm</option>
+            <option value="0.6">0,6 mm</option>
+            <option value="0.8">0,8 mm</option>
+            <option value="1.0">1,0 mm</option>
+          </select>
+        </label>
+        <label>Margen
+          <input type="number" id="margen" value="5" min="0" step="0.5">
+        </label>
+        <label>Tecnica
+          <select id="tecnologia">
+            <option value="fdm" selected>Filamento</option>
+            <option value="resina">Resina</option>
+          </select>
+        </label>
+      </div>
+      <p class="pista" id="util-maquina"></p>
+    </section>
+
+    <section>
+      <h2>Posicion</h2>
+      <p class="pista">Girar el modelo cambia como se reparten los cortes: de pie,
+        tumbado o girado salen piezas distintas. Se aplica antes de cortar.</p>
+      <div class="chips" id="giros"></div>
+      <div class="rejilla3">
+        <label>Giro X <input type="number" id="giro-x" value="0" step="15"></label>
+        <label>Giro Y <input type="number" id="giro-y" value="0" step="15"></label>
+        <label>Giro Z <input type="number" id="giro-z" value="0" step="15"></label>
+      </div>
+      <label class="fila"><span class="interruptor"><input type="checkbox" id="apoyar"><i></i></span>
+        Apoyar sola la cara mas grande</label>
     </section>
 
     <section>
@@ -230,10 +277,18 @@
           <option value="pins">Macho / hembra integrados</option>
         </select>
       </label>
-      <div class="rejilla3" id="opciones-espigas" hidden>
-        <label>Radio <input type="number" id="espiga-radio" value="3" min="0.5" step="0.5"></label>
-        <label>Prof. <input type="number" id="espiga-prof" value="6" min="1" step="1"></label>
-        <label>Por cara <input type="number" id="espiga-num" value="2" min="1" max="8" step="1"></label>
+      <div id="opciones-espigas" hidden>
+        <div class="rejilla3">
+          <label>Radio <input type="number" id="espiga-radio" value="3" min="0.5" step="0.5"></label>
+          <label>Prof. <input type="number" id="espiga-prof" value="6" min="1" step="1"></label>
+          <label>Por cara <input type="number" id="espiga-num" value="2" min="1" max="8" step="1"></label>
+        </div>
+        <label class="fila"><span class="interruptor"><input type="checkbox" id="espiga-auto" checked><i></i></span>
+          Ajustar el pasador al espesor de la pieza</label>
+        <p class="pista">En rebanadas finas o de pared delgada, el pasador se hace
+          pequeno solo para que quepa dentro de la pared y no atraviese la pieza.
+          El macho queda arriba y la hembra abajo, asi que la cara que va contra
+          la cama sigue siendo plana.</p>
       </div>
     </section>
 
