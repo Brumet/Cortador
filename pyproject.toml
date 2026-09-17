@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cortador"
-version = "0.4.0"
+version = "0.4.1"
 description = "Cortador de modelos 3D para gran formato: divide mallas en piezas que caben en tu impresora, genera laminas de espesor fijo y marca cada pieza para poder armarla despues."
 readme = "README.md"
 requires-python = ">=3.9"

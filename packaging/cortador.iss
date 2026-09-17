@@ -1,6 +1,6 @@
 ; Instalador de Cortador para Windows (Inno Setup 6)
 ;
-;   iscc /DMiVersion=0.4.0 packaging\cortador.iss
+;   iscc /DMiVersion=0.4.1 packaging\cortador.iss
 ;
 ; Instala en la carpeta del usuario, asi que no pide permisos de
 ; administrador, crea accesos directos y deja su desinstalador.
@@ -49,13 +49,17 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "escritorio"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
 
 [Files]
-Source: "..\dist\{#MiEjecutable}"; DestDir: "{app}"; Flags: ignoreversion
+; la app se empaqueta en carpeta (CORTADOR_MODO=carpeta): asi abre en un
+; segundo en vez de descomprimirse entera en cada arranque
+Source: "..\dist\Cortador\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; DestName: "LEEME.md"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MiNombre}"; Filename: "{app}\{#MiEjecutable}"
 Name: "{group}\Guia de uso"; Filename: "{app}\LEEME.md"
+Name: "{group}\Diagnostico de {#MiNombre}"; Filename: "{app}\{#MiEjecutable}"; Parameters: "--diagnostico"; Comment: "Genera un informe si la app no abre"
+Name: "{group}\Registro de arranque"; Filename: "{app}\{#MiEjecutable}"; Parameters: "--registro"; Comment: "Abre el registro del ultimo arranque"
 Name: "{group}\Desinstalar {#MiNombre}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MiNombre}"; Filename: "{app}\{#MiEjecutable}"; Tasks: escritorio
 
@@ -65,3 +69,34 @@ Filename: "{app}\{#MiEjecutable}"; Description: "Abrir {#MiNombre} ahora"; Flags
 [UninstallDelete]
 Type: files; Name: "{app}\cortador_error.log"
 Type: files; Name: "{app}\cortador_diagnostico.txt"
+Type: filesandordirs; Name: "{localappdata}\Cortador"
+
+[Code]
+// La ventana de la app es WebView2 (el mismo motor de Edge). Windows 10 y 11
+// lo traen de serie, pero en equipos muy limpios o con Edge quitado no esta,
+// y entonces la app se abriria en el navegador. Mejor avisar durante la
+// instalacion que dejar que el usuario lo descubra despues.
+function HayWebView2(): Boolean;
+var
+  version: String;
+begin
+  Result := RegQueryStringValue(HKLM, 'SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', version)
+         or RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', version)
+         or RegQueryStringValue(HKCU, 'SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', version);
+  if Result then
+    Result := (version <> '') and (version <> '0.0.0.0');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  codigo: Integer;
+begin
+  if (CurStep = ssPostInstall) and (not HayWebView2()) then
+  begin
+    if MsgBox('A este equipo le falta WebView2, que es lo que Cortador usa para su ventana.' + #13#10#13#10 +
+              'Sin el, Cortador funciona igual pero se abre en el navegador.' + #13#10#13#10 +
+              'Quieres descargarlo ahora desde Microsoft? (se abre la pagina oficial)',
+              mbConfirmation, MB_YESNO) = IDYES then
+      ShellExec('open', 'https://developer.microsoft.com/microsoft-edge/webview2/', '', '', SW_SHOW, ewNoWait, codigo);
+  end;
+end;

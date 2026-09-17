@@ -47,10 +47,21 @@ sube a ningun servidor. Codigo libre con licencia MIT.
 2. Doble clic, siguiente, siguiente. Se instala en tu carpeta de usuario, **no
    pide permisos de administrador** y crea el acceso directo en el menu Inicio
    y en el escritorio.
-3. Abre **Cortador** como cualquier otro programa: se abre en su propia ventana.
+3. Abre **Cortador** como cualquier otro programa: se abre en su propia ventana
+   en uno o dos segundos (primero la pantalla de espera, luego el panel).
 
 Para quitarlo: *Configuracion → Aplicaciones → Cortador → Desinstalar*, como
 cualquier programa normal.
+
+**Si no abre nada**, Cortador siempre deja escrito por que:
+
+- Menu Inicio → *Cortador* → **Registro de arranque**: abre
+  `%LOCALAPPDATA%\Cortador\arranque.log` con cada paso del arranque y el
+  error exacto si lo hubo.
+- Menu Inicio → *Cortador* → **Diagnostico de Cortador**: informe completo
+  (version, librerias, si hay WebView2, si el puerto local esta libre).
+
+Manda cualquiera de los dos y se sabe al momento que ha pasado.
 
 > Windows mostrara un aviso de SmartScreen la primera vez porque el instalador
 > no esta firmado: *Mas informacion → Ejecutar de todas formas*. Firmar cuesta
@@ -64,9 +75,13 @@ Si prefieres no instalar nada, descarga
 y ejecutalo directamente: es un solo archivo, funciona desde un USB y no deja
 nada instalado.
 
-Si no arranca, abrelo desde la consola con `Cortador-Windows.exe --diagnostico`:
-escribe un informe (`cortador_diagnostico.txt`) al lado del ejecutable con la
-version, lo que falta y si hay ventana de escritorio disponible.
+La version portable va en un solo archivo, asi que cada vez que se abre tiene
+que descomprimirse: tarda unos segundos mas que la instalada.
+
+Si no arranca, `Cortador-Windows.exe --diagnostico` escribe un informe
+(`cortador_diagnostico.txt`) al lado del ejecutable con la version, lo que
+falta y si hay ventana de escritorio disponible, y `Cortador-Windows.exe
+--registro` abre el registro del ultimo arranque.
 
 ### Opcion 2 — desde el codigo (Windows)
 

@@ -310,12 +310,17 @@ def cmd_repair(args) -> int:
 
 def cmd_app(args) -> int:
     """Abre Cortador como aplicacion de escritorio, en su propia ventana."""
-    from .desktop import backend_disponible, run
+    from .desktop import FALLO_MUDO, backend_disponible, run
     hay, motor = backend_disponible()
     if hay and not args.navegador:
         print(f"Abriendo Cortador (ventana {motor})...")
-    return run(host=args.host, port=args.puerto,
-               forzar_navegador=args.navegador, debug=args.depurar)
+    codigo = run(host=args.host, port=args.puerto,
+                 forzar_navegador=args.navegador, debug=args.depurar)
+    if codigo == FALLO_MUDO:
+        from .registro import ruta
+        print("El servidor interno no ha arrancado (mira si el cortafuegos "
+              f"bloquea 127.0.0.1). Registro: {ruta()}", file=sys.stderr)
+    return codigo
 
 
 def cmd_web(args) -> int:

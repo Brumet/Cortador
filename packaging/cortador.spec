@@ -3,7 +3,15 @@
 
     pyinstaller packaging/cortador.spec --noconfirm
 
-Genera un unico archivo que no necesita Python ni conexion a internet.
+Dos formas de empaquetar, segun la variable de entorno CORTADOR_MODO:
+
+  archivo (por defecto)  un unico .exe portable (dist/Cortador.exe). Comodo
+                         de mandar, pero cada vez que se abre descomprime
+                         ~70 MB en la carpeta temporal y tarda.
+  carpeta                una carpeta con todo dentro (dist/Cortador/). Arranca
+                         en un segundo; es lo que instala el instalador.
+
+Ninguna de las dos necesita Python ni conexion a internet.
 """
 
 import os
@@ -71,8 +79,10 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-exe = EXE(
-    pyz, a.scripts, a.binaries, a.datas, [],
+modo = (os.environ.get("CORTADOR_MODO") or "archivo").strip().lower()
+una_pieza = modo not in ("carpeta", "onedir", "dir")
+
+comunes = dict(
     name="Cortador",
     debug=False,
     bootloader_ignore_signals=False,
@@ -82,3 +92,12 @@ exe = EXE(
     disable_windowed_traceback=False,
     icon=icono if os.path.exists(icono) else None,
 )
+
+if una_pieza:
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], **comunes)
+else:
+    # la version que se instala: el .exe queda al lado de sus archivos, asi
+    # no hay que descomprimir nada en cada arranque
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, **comunes)
+    coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False,
+                   name="Cortador")

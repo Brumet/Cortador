@@ -48,26 +48,53 @@ jobs:
           pip install -e ".[web,app]"
           pip install pyinstaller
 
-      - name: Construir el ejecutable
+      - name: Construir el ejecutable portable
         run: python packaging/construir.py
 
       - name: Comprobar que arranca
         shell: bash
-        run: ./"${{ matrix.origen }}" --comprobar
+        run: |
+          set -e
+          ./"${{ matrix.origen }}" --comprobar | tee comprobacion.txt
+          grep -q "registro       : " comprobacion.txt || {
+            echo "::error::El ejecutable no escribe registro de arranque"
+            exit 1
+          }
 
       - name: Comprobar el diagnostico
-        shell: bash
-        run: ./"${{ matrix.origen }}" --diagnostico
-
-      - name: Comprobar que hay ventana de escritorio (Windows)
-        if: runner.os == 'Windows'
         shell: bash
         run: |
           set -e
           ./"${{ matrix.origen }}" --diagnostico > diagnostico.txt
           cat diagnostico.txt
+
+      - name: Comprobar que hay ventana de escritorio (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
           grep -q "ventana        : si" diagnostico.txt || {
             echo "::error::El ejecutable no encuentra motor de ventana: abriria el navegador"
+            exit 1
+          }
+
+      - name: Renombrar el portable
+        shell: bash
+        run: mv "${{ matrix.origen }}" "${{ matrix.nombre }}"
+
+      - name: Construir la version de carpeta (Windows)
+        if: runner.os == 'Windows'
+        run: python packaging/construir.py --carpeta
+
+      - name: Comprobar la version de carpeta (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          ./dist/Cortador/Cortador.exe --comprobar
+          ./dist/Cortador/Cortador.exe --diagnostico > diagnostico-carpeta.txt
+          cat diagnostico-carpeta.txt
+          grep -q "ventana        : si" diagnostico-carpeta.txt || {
+            echo "::error::La version instalable no encuentra motor de ventana"
             exit 1
           }
 
@@ -83,10 +110,6 @@ jobs:
           if (-not $version) { $version = "0.0.0" }
           & $iscc "/DMiVersion=$version" "packaging\cortador.iss"
           Get-ChildItem dist
-
-      - name: Renombrar
-        shell: bash
-        run: mv "${{ matrix.origen }}" "${{ matrix.nombre }}"
 
       - uses: actions/upload-artifact@v4
         with:

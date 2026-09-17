@@ -87,3 +87,83 @@ def test_si_la_ventana_falla_se_abre_el_navegador(monkeypatch):
     puerto = free_port("127.0.0.1", 8951)
     assert desktop.run(port=puerto) == 0
     assert abierto.get("url", "").endswith(f":{puerto}/")
+
+
+def test_la_ventana_aparece_antes_que_el_servidor(monkeypatch):
+    """Doble clic -> ventana con pantalla de espera ya, servidor por detras."""
+    import sys
+    import types
+
+    orden = []
+
+    class VentanaFalsa:
+        def __init__(self):
+            self.url = ""
+
+        def load_url(self, url):
+            orden.append("cargar")
+            self.url = url
+
+        def load_html(self, html):
+            orden.append("html")
+
+    ventana = VentanaFalsa()
+    falso = types.ModuleType("webview")
+
+    def crear(titulo, html=None, **kwargs):
+        orden.append("ventana")
+        assert html and "Preparando" in html
+        return ventana
+
+    def arrancar(func=None, **kwargs):
+        orden.append("start")
+        if func is not None:
+            func()
+
+    falso.create_window = crear
+    falso.start = arrancar
+    monkeypatch.setitem(sys.modules, "webview", falso)
+    monkeypatch.setattr(desktop, "backend_disponible", lambda: (True, "WebView2"))
+
+    puerto = desktop.puerto_libre("127.0.0.1", 8961)
+    assert desktop.run(port=puerto) == desktop.OK
+    assert orden[0] == "ventana" and orden.index("ventana") < orden.index("cargar")
+    assert ventana.url.endswith(f":{puerto}/")
+
+
+def test_si_el_servidor_no_responde_se_ve_en_la_ventana(monkeypatch):
+    """Nunca cerrarse en silencio: el motivo se muestra y se registra."""
+    import sys
+    import types
+
+    visto = {}
+
+    class VentanaFalsa:
+        def load_url(self, url):
+            raise AssertionError("no deberia cargar la interfaz")
+
+        def load_html(self, html):
+            visto["html"] = html
+
+    falso = types.ModuleType("webview")
+    falso.create_window = lambda *a, **k: VentanaFalsa()
+    falso.start = lambda func=None, **k: func() if func else None
+    monkeypatch.setitem(sys.modules, "webview", falso)
+    monkeypatch.setattr(desktop, "backend_disponible", lambda: (True, "WebView2"))
+    monkeypatch.setattr(desktop, "_esperar", lambda *a, **k: False)
+
+    puerto = desktop.puerto_libre("127.0.0.1", 8971)
+    assert desktop.run(port=puerto) == desktop.FALLO_AVISADO
+    assert "No he podido arrancar" in visto.get("html", "")
+    assert "arranque.log" in visto["html"]
+
+
+def test_sin_ventana_y_sin_servidor_avisa_quien_llama(monkeypatch):
+    """Modo navegador: si el servidor no levanta, hay que decirlo fuera."""
+    monkeypatch.setattr(desktop, "backend_disponible",
+                        lambda: (False, "sin motor"))
+    monkeypatch.setattr(desktop, "_esperar", lambda *a, **k: False)
+    monkeypatch.setattr(desktop, "_mantener_vivo", lambda url: None)
+
+    puerto = desktop.puerto_libre("127.0.0.1", 8981)
+    assert desktop.run(port=puerto) == desktop.FALLO_MUDO

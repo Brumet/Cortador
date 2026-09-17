@@ -15,6 +15,16 @@ nombre para que puedas armarla despues.
 
 Se abre en **su propia ventana**, no en el navegador.
 
+### Novedades de esta version
+
+- **Arranca en un segundo**: la version instalada ya no se descomprime entera
+  en cada apertura, y la ventana aparece nada mas hacer doble clic.
+- **Nunca falla en silencio**: cada arranque queda escrito en
+  `%LOCALAPPDATA%\Cortador\arranque.log` y, si algo va mal, se ve el motivo
+  en la propia ventana o en un aviso. En el menu Inicio hay accesos directos a
+  *Registro de arranque* y *Diagnostico de Cortador*.
+- El instalador avisa si al equipo le falta **WebView2** (el motor de la ventana).
+
 Funciona **sin conexion a internet** y todo se procesa en tu propio equipo:
 ningun modelo se sube a ningun servidor.
 
