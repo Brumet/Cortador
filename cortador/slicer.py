@@ -280,7 +280,11 @@ def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
     minimo = float(cfg.min_piece)
     # por debajo de dos lineas de extrusion no hay pieza que imprimir, solo
     # una rebaba del corte
-    grosor_minimo = 0.8 if minimo > 0 else 0.05
+    # con la piel solidificada, un trozo mas fino que media pared es un recorte
+    # de la esquina de una celda, no una pieza
+    grosor_minimo = 0.05
+    if minimo > 0:
+        grosor_minimo = max(0.8, cfg.wall * 0.4) if cfg.hollow else 0.8
     if medidas[0] < grosor_minimo:
         return False
     if minimo <= 0:

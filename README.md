@@ -117,10 +117,9 @@ cortador app        # o doble clic en el .exe / en Cortador.bat
 
 ![modo laminas](docs/laminas.png)
 
-<p align="center"><i>Una sola capa: dos anillos huecos, cada uno con su plaquita
-de marcado dentro</i></p>
+<p align="center"><i>Una capa aislada, para revisar lo que va en cada altura</i></p>
 
-![lamina hueca](docs/hueco.png)
+![una capa](docs/pieza.png)
 
 <p align="center"><i>Mientras trabaja siempre sabes por donde va</i></p>
 
@@ -190,7 +189,8 @@ algo menos antes de rendirse.
 - Donde el modelo es mas fino que dos veces el espesor, la pieza se queda maciza
   sola: nunca salen piezas de aire.
 - Al encoger un contorno con detalles finos aparecen esquirlas de decimas de
-  milimetro. Cortador las limpia (`--pieza-minima`, 5 mm por defecto).
+  milimetro, y en las esquinas de las celdas quedan recortes mas finos que la
+  propia pared. Cortador los limpia (`--pieza-minima`, 5 mm por defecto).
 - Los trozos sueltos de una misma celda se separan en piezas con nombre propio
   (`A2-L06a`, `A2-L06b`), cada una con su archivo y su marca.
 - En un pico o un pliegue muy cerrado los vertices se cruzarian y apareceria una
