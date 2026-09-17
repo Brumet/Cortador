@@ -143,6 +143,10 @@ def create_app() -> FastAPI:
         cfg = _config_from(payload.get("config"))
         work = apply_units_and_scale(job.mesh, cfg.units, cfg.scale, cfg.target_size,
                                      cfg.target_axis)
+        # el giro tambien cuenta aqui: si no, la rejilla que se dibuja encima
+        # del modelo no es la que se va a cortar
+        from ..slicer import orientar
+        work = orientar(work, cfg)
         plan = estimate_plan(work.bounds, cfg)
         plan["modelo"] = mesh_stats(work)
         # factor total aplicado, para que la rejilla encaje con la vista previa
@@ -179,10 +183,10 @@ def create_app() -> FastAPI:
         return data
 
     @app.get("/api/vista/{job_id}")
-    def vista(job_id: str, fuente: str = "piezas"):
+    def vista(job_id: str, fuente: str = "piezas", giro: str = ""):
         job = _get_job(job_id)
         if fuente == "original" or job.result is None:
-            payload = _original_payload(job)
+            payload = _original_payload(job, giro)
         else:
             payload = preview_payload(job.result)
         return Response(content=payload, media_type="application/octet-stream")
@@ -335,14 +339,27 @@ def _summary(job: Job) -> dict:
     }
 
 
-def _original_payload(job: Job) -> bytes:
-    """Vista previa del modelo sin cortar (una sola 'pieza' gris)."""
+def _original_payload(job: Job, giro: str = "") -> bytes:
+    """Vista previa del modelo sin cortar (una sola 'pieza' gris).
+
+    `giro` son los grados X,Y,Z que el usuario haya puesto: la vista tiene que
+    ensenar el modelo como se va a cortar, no como vino el archivo.
+    """
     import json
     import struct
 
     import numpy as np
 
     mesh = job.mesh
+    if giro:
+        try:
+            angulos = [float(v) for v in str(giro).split(",")]
+            if len(angulos) == 3 and any(abs(a) > 1e-9 for a in angulos):
+                from ..config import SliceConfig
+                from ..slicer import orientar
+                mesh = orientar(mesh, SliceConfig(rotation=tuple(angulos)))
+        except (TypeError, ValueError):
+            pass
     if len(mesh.faces) > 300_000:
         try:
             mesh = mesh.simplify_quadric_decimation(face_count=300_000)

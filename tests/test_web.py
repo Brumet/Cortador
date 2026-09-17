@@ -163,3 +163,55 @@ def test_descargar_una_pieza(cliente, stl_bytes):
 def test_abrir_carpeta_antes_de_cortar(cliente, stl_bytes):
     trabajo = _subir(cliente, stl_bytes)
     assert cliente.post(f"/api/abrir/{trabajo}").status_code == 404
+
+
+def test_la_rejilla_en_vivo_tiene_en_cuenta_el_giro():
+    """Si la vista previa ignora el giro, ensena un corte que no es el real."""
+    import trimesh
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from cortador.web.server import create_app
+
+    cliente = fastapi_testclient.TestClient(create_app())
+    barra = trimesh.creation.box(extents=[300.0, 60.0, 60.0])
+    datos = trimesh.exchange.stl.export_stl(barra)
+    trabajo = cliente.post("/api/modelo",
+                           files={"archivo": ("barra.stl", datos, "model/stl")}
+                           ).json()["trabajo"]
+
+    base = {"printer": {"x": 100, "y": 400, "z": 400, "clearance": 0}, "mode": "chunks"}
+    sin = cliente.post("/api/plan", json={"trabajo": trabajo,
+                                          "config": dict(base, rotation=[0, 0, 0])}).json()
+    con = cliente.post("/api/plan", json={"trabajo": trabajo,
+                                          "config": dict(base, rotation=[0, 0, 90])}).json()
+    assert sin["counts"][0] > con["counts"][0]
+
+
+def test_la_vista_del_original_se_puede_pedir_girada():
+    import trimesh
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from cortador.web.server import create_app
+
+    cliente = fastapi_testclient.TestClient(create_app())
+    barra = trimesh.creation.box(extents=[300.0, 60.0, 60.0])
+    datos = trimesh.exchange.stl.export_stl(barra)
+    trabajo = cliente.post("/api/modelo",
+                           files={"archivo": ("barra.stl", datos, "model/stl")}
+                           ).json()["trabajo"]
+
+    recta = cliente.get(f"/api/vista/{trabajo}?fuente=original&giro=0,0,0").content
+    girada = cliente.get(f"/api/vista/{trabajo}?fuente=original&giro=0,0,90").content
+    assert recta and girada
+    assert recta != girada               # la misma malla, en otra posicion
+
+
+def test_los_perfiles_se_sirven_a_la_interfaz():
+    fastapi_testclient = pytest.importorskip("fastapi.testclient")
+    from cortador.web.server import create_app
+
+    datos = fastapi_testclient.TestClient(create_app()).get("/api/perfiles").json()
+    ids = [p["id"] for p in datos["perfiles"]]
+    for esperado in ("flsun_v400", "flsun_t1", "flsun_sr", "bambu_a1"):
+        assert esperado in ids
+    v400 = [p for p in datos["perfiles"] if p["id"] == "flsun_v400"][0]
+    assert v400["printer"]["shape"] == "round"
+    assert v400["util"][0] < 210        # el cuadrado inscrito, no el diametro

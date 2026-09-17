@@ -315,7 +315,9 @@ async function repararEnWindows() {
 }
 
 async function verOriginal() {
-  const res = await api(`/api/vista/${estado.trabajo}?fuente=original`);
+  // la vista se pide ya girada: lo que se ve es lo que se va a cortar
+  const giro = [num('giro-x', 0), num('giro-y', 0), num('giro-z', 0)].join(',');
+  const res = await api(`/api/vista/${estado.trabajo}?fuente=original&giro=${giro}`);
   visor.setPayload(await res.arrayBuffer());
   visor.frameAll();
   estado.fuente = 'original';
@@ -732,6 +734,13 @@ lienzo.addEventListener('drop', (e) => cargarArchivo(e.dataTransfer.files[0]));
 
 ['px', 'py', 'pz', 'diametro', 'pz-round', 'margen'].forEach((id) => {
   $(id).addEventListener('input', pintarUtilMaquina);
+});
+
+/* girar cambia la figura que se corta: hay que volver a pedir la vista */
+['giro-x', 'giro-y', 'giro-z'].forEach((id) => {
+  $(id).addEventListener('change', () => {
+    if (estado.trabajo && estado.fuente === 'original') verOriginal();
+  });
 });
 pintarUtilMaquina();
 
