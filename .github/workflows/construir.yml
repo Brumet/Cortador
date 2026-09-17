@@ -51,18 +51,55 @@ jobs:
       - name: Construir el ejecutable
         run: python packaging/construir.py
 
+      - name: Comprobar que arranca
+        shell: bash
+        run: ./"${{ matrix.origen }}" --comprobar
+
+      - name: Comprobar el diagnostico
+        shell: bash
+        run: ./"${{ matrix.origen }}" --diagnostico
+
+      - name: Comprobar que hay ventana de escritorio (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -e
+          ./"${{ matrix.origen }}" --diagnostico > diagnostico.txt
+          cat diagnostico.txt
+          grep -q "ventana        : si" diagnostico.txt || {
+            echo "::error::El ejecutable no encuentra motor de ventana: abriria el navegador"
+            exit 1
+          }
+
+      - name: Construir el instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $version = "${{ inputs.version || github.ref_name }}" -replace '^v',''
+          if (-not $version) { $version = "0.0.0" }
+          & $iscc "/DMiVersion=$version" "packaging\cortador.iss"
+          Get-ChildItem dist
+
       - name: Renombrar
         shell: bash
         run: mv "${{ matrix.origen }}" "${{ matrix.nombre }}"
-
-      - name: Comprobar que arranca
-        shell: bash
-        run: ./"${{ matrix.nombre }}" --comprobar
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.nombre }}
           path: ${{ matrix.nombre }}
+          retention-days: 90
+
+      - name: Subir el instalador
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Cortador-Setup.exe
+          path: dist/Cortador-Setup.exe
           retention-days: 90
 
   publicar:

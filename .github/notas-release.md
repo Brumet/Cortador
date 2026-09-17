@@ -8,9 +8,12 @@ nombre para que puedas armarla despues.
 
 | Archivo | Para que |
 |---|---|
-| **Cortador-Windows.exe** | Windows. Doble clic y se abre en el navegador. No necesita instalar nada. |
+| **Cortador-Setup.exe** | **Instalador de Windows.** Doble clic y listo: acceso directo en el menu Inicio y en el escritorio, y desinstalador. No pide permisos de administrador. |
+| **Cortador-Windows.exe** | Version portable: un solo archivo, sin instalar nada. |
 | **Cortador-Linux** | Linux. `chmod +x Cortador-Linux && ./Cortador-Linux` |
 | **Source code (zip)** | El codigo completo, para instalarlo con Python o modificarlo. |
+
+Se abre en **su propia ventana**, no en el navegador.
 
 Funciona **sin conexion a internet** y todo se procesa en tu propio equipo:
 ningun modelo se sube a ningun servidor.

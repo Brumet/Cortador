@@ -6,7 +6,7 @@
 <p align="center"><b>by Brumet</b> · corta modelos 3D para gran formato</p>
 
 <p align="center">
-  <a href="https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe"><b>⬇ Descargar para Windows</b></a> ·
+  <a href="https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Setup.exe"><b>⬇ Instalar en Windows</b></a> ·
   <a href="https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux"><b>Linux</b></a> ·
   <a href="#instalacion">Instalacion</a> ·
   <a href="#uso-la-interfaz">Uso</a> ·
@@ -41,18 +41,28 @@ sube a ningun servidor. Codigo libre con licencia MIT.
 
 ## Instalacion
 
-### Opcion 1 — la app, sin instalar nada (recomendada)
+### Opcion 1 — instalador de Windows (recomendada)
 
-1. Descarga **[Cortador-Windows.exe](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe)**
-   (o **[Cortador-Linux](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux)**).
-   Todas las versiones estan en **[Releases](https://github.com/Brumet/Cortador/releases/latest)**.
-2. Doble clic. Se abre en su propia ventana.
+1. Descarga **[Cortador-Setup.exe](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Setup.exe)**.
+2. Doble clic, siguiente, siguiente. Se instala en tu carpeta de usuario, **no
+   pide permisos de administrador** y crea el acceso directo en el menu Inicio
+   y en el escritorio.
+3. Abre **Cortador** como cualquier otro programa: se abre en su propia ventana.
 
-No necesita Python, ni internet, ni permisos de administrador. Puedes llevarlo en
-un USB y usarlo en cualquier PC las veces que quieras.
+Para quitarlo: *Configuracion → Aplicaciones → Cortador → Desinstalar*, como
+cualquier programa normal.
 
-> Windows mostrara un aviso de SmartScreen la primera vez porque el archivo no
-> esta firmado: *Mas informacion → Ejecutar de todas formas*.
+> Windows mostrara un aviso de SmartScreen la primera vez porque el instalador
+> no esta firmado: *Mas informacion → Ejecutar de todas formas*. Firmar cuesta
+> unos 200 euros al ano; mientras tanto, el aviso es inevitable.
+
+### Opcion 1b — version portable
+
+Si prefieres no instalar nada, descarga
+**[Cortador-Windows.exe](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe)**
+(o **[Cortador-Linux](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux)**)
+y ejecutalo directamente: es un solo archivo, funciona desde un USB y no deja
+nada instalado.
 
 Si no arranca, abrelo desde la consola con `Cortador-Windows.exe --diagnostico`:
 escribe un informe (`cortador_diagnostico.txt`) al lado del ejecutable con la

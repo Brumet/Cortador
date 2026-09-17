@@ -9,11 +9,30 @@ import os
 import sys
 
 
+def _opciones() -> set:
+    """Argumentos normalizados: tolera guiones raros, barras y mayusculas.
+
+    Al copiar un comando desde el chat o desde la web, los guiones se cuelan a
+    veces como guion largo y entonces la opcion no se reconocia y el programa
+    arrancaba normal, que es justo lo que confunde.
+    """
+    limpios = set()
+    for bruto in sys.argv[1:]:
+        arg = bruto.strip().lower()
+        for raro in ("\u2010", "\u2011", "\u2012", "\u2013", "\u2014", "\u2212"):
+            arg = arg.replace(raro, "-")
+        limpios.add(arg.lstrip("-/"))
+    return limpios
+
+
 def main() -> None:
     multiprocessing.freeze_support()
-    if any(a in ("--diagnostico", "--diagnose") for a in sys.argv[1:]):
+    opciones = _opciones()
+    if opciones & {"diagnostico", "diagnose", "d"}:
         _diagnostico()
         return
+    if opciones & {"navegador", "browser"}:
+        os.environ["CORTADOR_NAVEGADOR"] = "1"
     if any(a in ("--comprobar", "--check", "--version") for a in sys.argv[1:]):
         # lo usa la compilacion automatica para verificar que el binario arranca
         from cortador import __version__
@@ -24,7 +43,8 @@ def main() -> None:
     os.environ.setdefault("CORTADOR_EMPAQUETADO", "1")
     from cortador.desktop import run
     try:
-        run(host="127.0.0.1", port=8000)
+        run(host="127.0.0.1", port=8000,
+            forzar_navegador=bool(os.environ.get("CORTADOR_NAVEGADOR")))
     except KeyboardInterrupt:
         pass
     except Exception as exc:  # sin consola visible: dejar rastro y avisar

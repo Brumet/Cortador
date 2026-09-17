@@ -29,6 +29,23 @@ hiddenimports = [
     "manifold3d", "mapbox_earcut", "rtree", "scipy.spatial", "scipy.sparse.csgraph",
 ]
 
+if es_windows:
+    # la ventana de escritorio usa WebView2 a traves de WinForms, y eso pasa
+    # por pythonnet: sin estos modulos pywebview no encuentra motor y la app
+    # termina abriendose en el navegador
+    hiddenimports += [
+        "clr", "clr_loader", "pythonnet",
+        "webview.platforms.winforms", "webview.platforms.edgechromium",
+    ]
+    for paquete in ("clr_loader", "pythonnet"):
+        try:
+            extra_datas, extra_binaries, extra_hidden = collect_all(paquete)
+            datas += extra_datas
+            binaries += extra_binaries
+            hiddenimports += extra_hidden
+        except Exception:
+            pass
+
 for paquete in ("trimesh", "shapely", "fastapi", "starlette", "pydantic", "webview"):
     try:
         paquete_datas, paquete_binaries, paquete_hidden = collect_all(paquete)
