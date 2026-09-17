@@ -7,12 +7,20 @@
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
+    position: relative;
     display: flex; align-items: center; justify-content: center;
-    background: #0b0b0d; color: #f5f5f7;
+    background: #0b0b0d center / cover no-repeat url(assets/fondo-arranque.jpg);
+    color: #f5f5f7;
     font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
     -webkit-user-select: none; user-select: none;
   }
-  .caja { width: 100%; max-width: 680px; padding: 0 40px; text-align: center; }
+  /* velo: el fondo acompana, no compite con el logo */
+  body::before { content: ''; position: fixed; inset: 0; pointer-events: none;
+                 background: radial-gradient(ellipse at center,
+                             rgba(11,11,13,.20) 0%, rgba(11,11,13,.66) 58%,
+                             rgba(11,11,13,.95) 100%); }
+  .caja { position: relative; z-index: 1;
+          width: 100%; max-width: 680px; padding: 0 40px; text-align: center; }
 
   /* El logo de Brumet tal cual es (solo cambia el color segun el fondo) y, por
      encima, un hilo de corte que lo recorre: la identidad de esta app es el

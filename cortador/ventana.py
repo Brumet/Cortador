@@ -20,7 +20,7 @@ import sys
 import tempfile
 from typing import List, Optional, Tuple
 
-from .marca import logo
+from .marca import fondo_oscuro, logo
 from .registro import paso
 
 ANCHO, ALTO = 1440, 900
@@ -134,7 +134,8 @@ def escribir_espera(url: str, registro: str) -> str:
     destino = os.path.join(carpeta_perfil(), "espera.html")
     html = (_HTML_ESPERA.replace("URL_DEL_SERVIDOR", url)
             .replace("RUTA_REGISTRO", registro)
-            .replace("LOGO_BRUMET", logo()))
+            .replace("LOGO_BRUMET", logo())
+            .replace("FONDO_ARRANQUE", fondo_oscuro()))
     with open(destino, "w", encoding="utf-8") as fh:
         fh.write(html)
     return destino
@@ -145,11 +146,17 @@ _HTML_ESPERA = """<!doctype html>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
-  body { display: flex; align-items: center; justify-content: center;
-         background: #0b0b0d; color: #f5f5f7;
+  body { position: relative; display: flex; align-items: center; justify-content: center;
+         background: #0b0b0d center / cover no-repeat url(FONDO_ARRANQUE);
+         color: #f5f5f7;
          font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
          -webkit-user-select: none; user-select: none; }
-  .caja { text-align: center; max-width: 640px; padding: 0 32px; }
+  body::before { content: ''; position: fixed; inset: 0; pointer-events: none;
+                 background: radial-gradient(ellipse at center,
+                             rgba(11,11,13,.20) 0%, rgba(11,11,13,.66) 58%,
+                             rgba(11,11,13,.95) 100%); }
+  .caja { position: relative; z-index: 1;
+          text-align: center; max-width: 640px; padding: 0 32px; }
   .marca { position: relative; display: inline-block; padding: 14px 26px; }
   .marca svg { height: 74px; width: auto; display: block; }
   .marca-texto { font-size: 34px; font-weight: 650; letter-spacing: .04em; }

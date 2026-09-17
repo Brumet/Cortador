@@ -311,6 +311,23 @@ input[type=range]::-moz-range-thumb {
   position: absolute; inset: 0; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center; padding: 40px; gap: 10px;
 }
+/* la portada lleva de fondo la textura de contornos, muy apagada: se nota
+   que hay algo detras sin que compita con el texto */
+.vacio { isolation: isolate; }   /* ya es absolute, arriba */
+.vacio::before { content: ''; position: absolute; inset: 0; z-index: -1;
+                 border-radius: var(--radio);
+                 background: center / cover no-repeat url(/static/fondo-claro.jpg);
+                 opacity: .85; }
+.vacio::after { content: ''; position: absolute; inset: 0; z-index: -1;
+                border-radius: var(--radio);
+                background: radial-gradient(ellipse at center,
+                            rgba(236,236,237,.58) 0%, rgba(236,236,237,.86) 72%); }
+@media (prefers-color-scheme: dark) {
+  .vacio::before { background-image: url(/static/fondo-oscuro.jpg); opacity: .8; }
+  .vacio::after { background: radial-gradient(ellipse at center,
+                  rgba(14,16,20,.55) 0%, rgba(14,16,20,.88) 72%); }
+}
+
 .logo-grande { height: 62px; width: auto; opacity: .92; margin-bottom: 10px; }
 @media (prefers-color-scheme: dark) { .logo-grande { filter: invert(1); } }
 .vacio h1 { font-size: 30px; font-weight: 600; letter-spacing: -.8px; margin: 0; line-height: 1.15; }

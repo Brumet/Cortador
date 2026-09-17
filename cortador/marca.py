@@ -14,6 +14,7 @@ import re
 ESTATICOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "static")
 NEGRO = os.path.join(ESTATICOS, "brumet.svg")
 BLANCO = os.path.join(ESTATICOS, "brumet-blanco.svg")
+FONDO_OSCURO = os.path.join(ESTATICOS, "fondo-oscuro.jpg")
 
 # por si el archivo no viaja con la app: el nombre, en texto, antes que nada
 RESPALDO = '<span class="marca-texto">BRUMET</span>'
@@ -31,3 +32,18 @@ def logo(blanco: bool = True) -> str:
     if not svg.startswith("<svg"):
         return RESPALDO
     return svg
+
+
+def fondo_oscuro() -> str:
+    """El fondo de la pantalla de espera como data URI (o cadena vacia).
+
+    Va incrustado porque estas pantallas se muestran antes de que exista el
+    servidor que sirve los archivos.
+    """
+    import base64
+    try:
+        with open(FONDO_OSCURO, "rb") as fh:
+            datos = base64.b64encode(fh.read()).decode()
+    except OSError:
+        return ""
+    return f"data:image/jpeg;base64,{datos}"

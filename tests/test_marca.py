@@ -51,3 +51,28 @@ def test_las_pantallas_de_espera_llevan_el_logo_y_su_hilo_de_corte():
     pagina = ventana.escribir_espera("http://127.0.0.1:1/", "/tmp/x.log")
     texto = open(pagina, encoding="utf-8").read()
     assert "<svg" in texto and "LOGO_BRUMET" not in texto
+
+
+def test_las_texturas_generadas_viajan_con_la_app():
+    """Matcaps y fondos: si faltan, el visor y las pantallas pierden el acabado."""
+    for nombre in ("matcap-oscuro.png", "matcap-claro.png",
+                   "fondo-oscuro.jpg", "fondo-claro.jpg"):
+        ruta = os.path.join(ESTATICOS, nombre)
+        assert os.path.exists(ruta), nombre
+        assert os.path.getsize(ruta) > 10_000, nombre
+
+
+def test_el_visor_usa_el_matcap_pero_no_depende_de_el():
+    js = open(os.path.join(ESTATICOS, "viewer.js"), encoding="utf-8").read()
+    assert "uMatcap" in js and "setMatcap" in js
+    # sin textura cargada, uMatcapMix vale 0 y se ven las luces de siempre
+    assert "this.matcapMix = 0;" in js
+    assert "if (uMatcapMix > 0.001)" in js
+    app = open(os.path.join(ESTATICOS, "app.js"), encoding="utf-8").read()
+    assert "matcap-oscuro.png" in app and "matcap-claro.png" in app
+
+
+def test_la_pantalla_de_espera_lleva_su_fondo():
+    from cortador import marca
+    uri = marca.fondo_oscuro()
+    assert uri.startswith("data:image/jpeg;base64,")

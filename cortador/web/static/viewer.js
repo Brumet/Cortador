@@ -64,14 +64,30 @@ const FRAG = `
 precision mediump float;
 uniform vec3 uColor;
 uniform float uGhost;
+uniform mat3 uNormalView;   // rotacion de la camara, para el matcap
+uniform sampler2D uMatcap;
+uniform float uMatcapMix;   // 0 = luces calculadas, 1 = matcap
 varying vec3 vNormal;
 void main() {
   vec3 n = normalize(vNormal);
+
+  // luces de toda la vida, que es lo que se ve si no hay textura
   vec3 key = normalize(vec3(0.45, -0.7, 0.85));
   vec3 fill = normalize(vec3(-0.6, 0.3, 0.2));
   float d = max(dot(n, key), 0.0) * 0.72 + max(dot(n, fill), 0.0) * 0.22;
   float sky = 0.28 + 0.22 * (n.z * 0.5 + 0.5);
   vec3 col = uColor * (d + sky);
+
+  if (uMatcapMix > 0.001) {
+    // matcap: la normal en coordenadas de camara elige el punto de la esfera
+    vec3 nv = normalize(uNormalView * n);
+    vec2 uv = nv.xy * 0.5 + 0.5;
+    vec3 m = texture2D(uMatcap, uv).rgb;
+    float lum = dot(m, vec3(0.299, 0.587, 0.114));
+    vec3 conMatcap = uColor * (0.46 + 1.25 * lum) + m * 0.28;
+    col = mix(col, conMatcap, uMatcapMix);
+  }
+
   col = pow(col, vec3(0.85));
   gl_FragColor = vec4(col, uGhost);
 }`;
@@ -137,9 +153,45 @@ export class Viewer {
     this.pan = [0, 0, 0];
     this.background = [0.055, 0.063, 0.078];
     this.lineColor = [0.45, 0.85, 1.0, 1.0];
+    this.matcapMix = 0;
+    this.matcap = this._texturaLisa();
     this._setupInput();
     this._resize();
     this.render();
+  }
+
+  // ---- material ---------------------------------------------------
+  _texturaLisa() {
+    // un pixel gris: lo que se usa mientras no haya matcap cargado
+    const gl = this.gl;
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 1, 1, 0, gl.RGB, gl.UNSIGNED_BYTE,
+                  new Uint8Array([160, 160, 160]));
+    return tex;
+  }
+
+  /* Carga la esfera de material (matcap). Si no llega, no pasa nada: se
+     siguen usando las luces calculadas de siempre. */
+  setMatcap(url) {
+    const gl = this.gl;
+    const img = new Image();
+    img.onload = () => {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      this.matcap = tex;
+      this.matcapMix = 1;
+      this.render();
+    };
+    img.onerror = () => { /* sin matcap, el visor funciona igual */ };
+    img.src = url;
   }
 
   // ---- datos ------------------------------------------------------
@@ -377,6 +429,18 @@ export class Viewer {
     const aPos = gl.getAttribLocation(this.prog, 'aPos');
     const aNormal = gl.getAttribLocation(this.prog, 'aNormal');
     gl.uniformMatrix4fv(uMVP, false, mvp);
+
+    // el matcap necesita la normal vista desde la camara: basta la parte de
+    // rotacion de la matriz de vista, porque el modelo no se rota
+    const rot = new Float32Array([view[0], view[1], view[2],
+                                  view[4], view[5], view[6],
+                                  view[8], view[9], view[10]]);
+    gl.uniformMatrix3fv(gl.getUniformLocation(this.prog, 'uNormalView'), false, rot);
+    gl.uniform1f(gl.getUniformLocation(this.prog, 'uMatcapMix'), this.matcapMix);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.matcap);
+    gl.uniform1i(gl.getUniformLocation(this.prog, 'uMatcap'), 0);
+
     gl.enableVertexAttribArray(aPos);
     gl.enableVertexAttribArray(aNormal);
 

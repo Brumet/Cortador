@@ -33,6 +33,8 @@ function aplicarTema() {
   }
   const oscuro = window.matchMedia('(prefers-color-scheme: dark)').matches;
   visor.lineColor = oscuro ? [0.35, 0.62, 0.95, 1] : [0.0, 0.44, 0.89, 0.75];
+  // la esfera de material: una para el tema oscuro y otra para el claro
+  visor.setMatcap(oscuro ? '/static/matcap-oscuro.png' : '/static/matcap-claro.png');
   visor.render();
 }
 

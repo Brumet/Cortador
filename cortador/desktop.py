@@ -33,7 +33,7 @@ import time
 from typing import Optional, Tuple
 
 from . import ventana as ventana_app
-from .marca import logo
+from .marca import fondo_oscuro, logo
 from .registro import fallo, paso, ruta as ruta_registro
 
 TITULO = "Cortador  ·  by Brumet"
@@ -164,12 +164,19 @@ _ESTILO = """
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
+    position: relative;
     display: flex; align-items: center; justify-content: center;
-    background: #0b0b0d; color: #f5f5f7;
+    background: #0b0b0d center / cover no-repeat url(FONDO_ARRANQUE);
+    color: #f5f5f7;
     font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
     -webkit-user-select: none; user-select: none;
   }
-  .caja { text-align: center; max-width: 620px; padding: 0 32px; }
+  body::before { content: ''; position: fixed; inset: 0; pointer-events: none;
+                 background: radial-gradient(ellipse at center,
+                             rgba(11,11,13,.20) 0%, rgba(11,11,13,.66) 58%,
+                             rgba(11,11,13,.95) 100%); }
+  .caja { position: relative; z-index: 1;
+          text-align: center; max-width: 620px; padding: 0 32px; }
   .marca { position: relative; display: inline-block; padding: 14px 26px; }
   .marca svg { height: 74px; width: auto; display: block; }
   .marca-texto { font-size: 34px; font-weight: 650; letter-spacing: .04em; }
@@ -189,6 +196,8 @@ _ESTILO = """
          background: #161619; color: #ff9f0a; font-size: 12.5px;
          white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
 """
+
+_ESTILO = _ESTILO.replace("FONDO_ARRANQUE", fondo_oscuro())
 
 _HTML_ESPERA = f"""<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Cortador</title><style>{_ESTILO}</style></head><body>
