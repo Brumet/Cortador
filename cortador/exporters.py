@@ -95,10 +95,17 @@ def pieces_csv(result: SliceResult) -> str:
     return buf.getvalue()
 
 
-def slicer_settings(result: SliceResult, line_width: float = 0.4) -> str:
-    """Ajustes recomendados del laminador para una pieza solidificada."""
+def slicer_settings(result: SliceResult, line_width: float = 0.0) -> str:
+    """Ajustes recomendados del laminador para una pieza solidificada.
+
+    El ancho de linea sale de la boquilla del perfil de maquina: con una de 0,4
+    y con una de 1,0 no se imprime igual, y los perimetros que hay que poner en
+    el laminador tampoco son los mismos.
+    """
     cfg = result.config
     pared = float(cfg.wall)
+    if line_width <= 0:
+        line_width = cfg.printer.line_width()
     perimetros = max(2, int(round(pared / max(line_width, 0.05))))
     lineas = [
         "AJUSTES DEL LAMINADOR (Cura, PrusaSlicer, Bambu Studio, Orca...)",
@@ -109,7 +116,8 @@ def slicer_settings(result: SliceResult, line_width: float = 0.4) -> str:
         "",
         f"  Relleno (infill) . . . . . . . 0 %",
         f"  Perimetros / paredes . . . . . {perimetros}    (= {pared:g} mm / {line_width:g} mm de linea)",
-        f"  Ancho de linea . . . . . . . . {line_width:g} mm",
+        f"  Ancho de linea . . . . . . . . {line_width:g} mm"
+        f"   (boquilla de {cfg.printer.nozzle:g} mm)",
         "  Capas superiores e inferiores  las que uses normalmente (4-5)",
         "  Soportes . . . . . . . . . . . solo si la pieza los pide de verdad",
         "",

@@ -162,3 +162,27 @@ def test_ajustes_del_laminador(caja_modulo, tmp_path):
 def test_sin_vaciado_no_hay_archivo_de_ajustes(resultado, tmp_path):
     export_result(resultado, str(tmp_path), write_preview=False, write_2d=False)
     assert not (tmp_path / "AJUSTES_LAMINADOR.txt").exists()
+
+
+def test_los_ajustes_del_laminador_siguen_a_la_boquilla():
+    """Con una boquilla de 1,0 no se ponen los mismos perimetros que con 0,4."""
+    import trimesh
+    from cortador.config import PrinterSpec, SliceConfig
+    from cortador.exporters import slicer_settings
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=2, radius=50.0)
+
+    fina = SliceConfig(printer=PrinterSpec(x=300, y=300, z=300, nozzle=0.4),
+                       hollow=True, wall=3.36)
+    gorda = SliceConfig(printer=PrinterSpec(x=300, y=300, z=300, nozzle=1.0),
+                        hollow=True, wall=3.15)
+
+    texto_fino = slicer_settings(slice_model(esfera, fina))
+    texto_gordo = slicer_settings(slice_model(esfera, gorda))
+
+    assert "0.42 mm" in texto_fino and "boquilla de 0.4 mm" in texto_fino
+    assert "1.05 mm" in texto_gordo and "boquilla de 1 mm" in texto_gordo
+    # la pared fina necesita el doble de perimetros que la gorda
+    assert "8    (" in texto_fino
+    assert "3    (" in texto_gordo
