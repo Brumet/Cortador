@@ -25,10 +25,10 @@ terminado** y **cuanto mide tu impresora**, y Cortador hace dos cosas:
 2. **Corta el resultado en trozos del tamano de tu impresora**. Siempre. Ninguna
    pieza se sale de la cama.
 
-Con **Brumo** a 1,80 m de alto en una FLSUN V400: de **896 litros macizo a 74**
-(92 % menos de material y de horas de maquina), en 297 piezas que caben todas en
-la cama redonda. Con un gorila del mismo tamano en una Ender 3, de 1.024 litros
-a 22.
+Con **Brumo**, la mascota de Brumet, a 1,80 m de alto en una FLSUN V400: de
+**901 litros macizo a 57,8** (94 % menos de material y de horas de maquina), en
+224 piezas que caben todas en la cama redonda. Con un gorila del mismo tamano en
+una Ender 3, de 1.024 litros a 22.
 
 Cada pieza sale **marcada con su nombre grabado** y, si quieres, con **pasadores
 de alineacion**, para que luego puedas armar el modelo entero sin volverte loco.
@@ -37,9 +37,9 @@ Es una **aplicacion de escritorio**: se abre en su propia ventana, no en el
 navegador. Todo ocurre **en tu equipo**, funciona sin conexion y ningun modelo se
 sube a ningun servidor. Codigo libre con licencia MIT.
 
-![Brumo cortado en 297 piezas](docs/panel.png)
+![Brumo cortado en 224 piezas](docs/panel.png)
 
-<p align="center"><i>Brumo, 1,80 m de alto, en 297 piezas para una FLSUN V400</i></p>
+<p align="center"><i>Brumo, 1,80 m de alto, en 224 piezas para una FLSUN V400</i></p>
 
 <p align="center"><i>La rejilla de corte se dibuja encima del modelo antes de cortar nada</i></p>
 
