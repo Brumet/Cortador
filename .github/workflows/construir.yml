@@ -127,6 +127,37 @@ jobs:
         shell: bash
         run: ls -la escritorio/dist
 
+      - name: Comprobar que la ventana abre de verdad
+        shell: pwsh
+        run: |
+          # Se arranca la app ya construida y se le pide una foto de su ventana:
+          # si no aparece, es que no abre, y entonces no se publica nada.
+          $exe = "escritorio\dist\win-unpacked\Cortador.exe"
+          if (-not (Test-Path $exe)) { throw "no encuentro $exe" }
+          $foto = Join-Path $PWD "ventana.png"
+          $env:CORTADOR_CAPTURA = $foto
+          $proceso = Start-Process -FilePath $exe -PassThru
+          $limite = (Get-Date).AddSeconds(150)
+          while ((Get-Date) -lt $limite -and -not (Test-Path $foto)) {
+            Start-Sleep -Seconds 3
+          }
+          if (-not (Test-Path $foto)) {
+            if (-not $proceso.HasExited) { $proceso.Kill() }
+            Get-Content "$env:LOCALAPPDATA\Cortador\arranque.log" -ErrorAction SilentlyContinue
+            throw "La ventana no llego a abrirse"
+          }
+          Get-Content "$env:LOCALAPPDATA\Cortador\arranque.log"
+          Write-Host "Ventana abierta y capturada: $((Get-Item $foto).Length) bytes"
+
+      - name: Guardar la foto de la ventana
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ventana-windows
+          path: ventana.png
+          if-no-files-found: ignore
+          retention-days: 30
+
       - uses: actions/upload-artifact@v4
         with:
           name: Cortador-Setup

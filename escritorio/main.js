@@ -143,6 +143,22 @@ async function arrancar () {
 
   anotar('motor listo · cargando la interfaz')
   if (ventana && !ventana.isDestroyed()) ventana.loadURL(urlMotor)
+  if (process.env.CORTADOR_CAPTURA) capturar(process.env.CORTADOR_CAPTURA)
+}
+
+// Foto de la ventana ya cargada, para comprobar desde la compilacion que la
+// aplicacion abre de verdad y no solo que el proceso arranca.
+function capturar (destino) {
+  setTimeout(async () => {
+    try {
+      const imagen = await ventana.webContents.capturePage()
+      fs.writeFileSync(destino, imagen.toPNG())
+      anotar('captura guardada en ' + destino)
+    } catch (e) {
+      anotar('ERROR al capturar: ' + e.message)
+    }
+    app.quit()
+  }, 6000)
 }
 
 function fallar (mensaje) {

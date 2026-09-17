@@ -58,3 +58,16 @@ def test_la_ventana_no_se_queda_muda():
     with open(os.path.join(APP, "espera.html"), encoding="utf-8") as fh:
         espera = fh.read()
     assert "Reintentar" in espera and "registro" in espera
+
+
+def test_la_app_sabe_hacerse_una_foto():
+    """La compilacion exige una foto de la ventana antes de publicar nada."""
+    with open(os.path.join(APP, "main.js"), encoding="utf-8") as fh:
+        main_js = fh.read()
+    assert "CORTADOR_CAPTURA" in main_js and "capturePage" in main_js
+
+    flujo = os.path.join(RAIZ, ".github", "workflows", "construir.yml")
+    with open(flujo, encoding="utf-8") as fh:
+        texto = fh.read()
+    assert "CORTADOR_CAPTURA" in texto
+    assert "La ventana no llego a abrirse" in texto
