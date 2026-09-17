@@ -47,21 +47,17 @@ sube a ningun servidor. Codigo libre con licencia MIT.
 2. Doble clic, siguiente, siguiente. Se instala en tu carpeta de usuario, **no
    pide permisos de administrador** y crea el acceso directo en el menu Inicio
    y en el escritorio.
-3. Abre **Cortador** como cualquier otro programa: se abre en su propia ventana
-   en uno o dos segundos (primero la pantalla de espera, luego el panel).
+3. Abre **Cortador**: sale su ventana con el logo y, debajo, el panel de corte.
 
-Para quitarlo: *Configuracion → Aplicaciones → Cortador → Desinstalar*, como
-cualquier programa normal.
+La ventana es de la propia aplicacion (Electron trae su navegador dentro), asi
+que no depende de WebView2, ni de Edge, ni de nada que tengas que instalar
+aparte. Es la misma base con la que esta hecho Brumet Slicer.
 
-**Si no abre nada**, Cortador siempre deja escrito por que:
+Para quitarlo: *Configuracion → Aplicaciones → Cortador → Desinstalar*.
 
-- Menu Inicio → *Cortador* → **Registro de arranque**: abre
-  `%LOCALAPPDATA%\Cortador\arranque.log` con cada paso del arranque y el
-  error exacto si lo hubo.
-- Menu Inicio → *Cortador* → **Diagnostico de Cortador**: informe completo
-  (version, librerias, si hay WebView2, si el puerto local esta libre).
-
-Manda cualquiera de los dos y se sabe al momento que ha pasado.
+**Si algo falla**, la ventana lo dice en pantalla, con el motivo y un boton
+para ver el registro completo (`%LOCALAPPDATA%\Cortador\arranque.log`).
+Mandando ese archivo se sabe al momento que ha pasado.
 
 > Windows mostrara un aviso de SmartScreen la primera vez porque el instalador
 > no esta firmado: *Mas informacion → Ejecutar de todas formas*. Firmar cuesta
@@ -73,15 +69,13 @@ Si prefieres no instalar nada, descarga
 **[Cortador-Windows.exe](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Windows.exe)**
 (o **[Cortador-Linux](https://github.com/Brumet/Cortador/releases/latest/download/Cortador-Linux)**)
 y ejecutalo directamente: es un solo archivo, funciona desde un USB y no deja
-nada instalado.
+nada instalado. Abre la ventana con Edge o Chrome en modo aplicacion (sin
+barra de direcciones ni pestanas); si no encuentra ninguno, usa el navegador.
 
-La version portable va en un solo archivo, asi que cada vez que se abre tiene
-que descomprimirse: tarda unos segundos mas que la instalada.
-
-Si no arranca, `Cortador-Windows.exe --diagnostico` escribe un informe
-(`cortador_diagnostico.txt`) al lado del ejecutable con la version, lo que
-falta y si hay ventana de escritorio disponible, y `Cortador-Windows.exe
---registro` abre el registro del ultimo arranque.
+Al ir en un solo archivo, cada vez que se abre tiene que descomprimirse: tarda
+unos segundos mas que la version instalada. Si no arranca,
+`Cortador-Windows.exe --diagnostico` escribe un informe con lo que falta, y
+`Cortador-Windows.exe --registro` abre el registro del ultimo arranque.
 
 ### Opcion 2 — desde el codigo (Windows)
 

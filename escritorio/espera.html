@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Cortador</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: #0b0b0d; color: #f5f5f7;
+    font-family: -apple-system, 'Segoe UI', Inter, system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  .caja { width: 100%; max-width: 680px; padding: 0 40px; text-align: center; }
+  .marca { font-size: 36px; font-weight: 650; letter-spacing: -.02em; }
+  .marca span { opacity: .45; font-weight: 400; }
+  .nota { margin-top: 12px; font-size: 14px; color: #8e8e93; min-height: 20px; }
+  .barra { margin: 30px auto 0; width: 240px; height: 3px; border-radius: 3px;
+           background: #1d1d20; overflow: hidden; }
+  .barra i { display: block; width: 40%; height: 100%; border-radius: 3px;
+             background: linear-gradient(90deg, #0a84ff, #64d2ff);
+             animation: corre 1.25s ease-in-out infinite; }
+  @keyframes corre { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+  #malo { display: none; text-align: left; margin-top: 28px; }
+  #malo h2 { font-size: 19px; margin: 0 0 10px; }
+  #malo p { color: #aeaeb2; font-size: 14px; line-height: 1.6; margin: 0 0 6px; }
+  pre, code { display: block; margin-top: 12px; padding: 12px 14px; border-radius: 10px;
+        background: #161619; color: #ff9f0a; font-size: 12px; line-height: 1.5;
+        white-space: pre-wrap; max-height: 220px; overflow: auto;
+        -webkit-user-select: text; user-select: text; }
+  .botones { margin-top: 18px; display: flex; gap: 10px; }
+  button { font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 10px;
+           border: 1px solid #2c2c2e; background: #1c1c1e; color: #f5f5f7; cursor: pointer; }
+  button.primario { background: #0a84ff; border-color: #0a84ff; }
+  button:hover { filter: brightness(1.15); }
+</style>
+</head>
+<body>
+  <div class="caja">
+    <div class="marca">Cortador <span>· by Brumet</span></div>
+    <div class="nota" id="nota">Preparando el motor de corte&hellip;</div>
+    <div class="barra" id="barra"><i></i></div>
+
+    <div id="malo">
+      <h2>No he podido arrancar el motor de corte</h2>
+      <p id="motivo"></p>
+      <p>Esto es lo ultimo que dijo por dentro:</p>
+      <pre id="salida"></pre>
+      <div class="botones">
+        <button class="primario" onclick="reintentar()">Reintentar</button>
+        <button onclick="verRegistro()">Ver el registro completo</button>
+      </div>
+      <p style="margin-top:14px">Manda ese registro y lo miramos:</p>
+      <code id="registro"></code>
+    </div>
+  </div>
+<script>
+  const { ipcRenderer } = require('electron')
+
+  ipcRenderer.on('paso', (_e, texto) => {
+    if (String(texto).startsWith('motor|')) return
+    document.getElementById('nota').textContent = texto
+  })
+
+  ipcRenderer.on('fallo', (_e, datos) => {
+    document.getElementById('barra').style.display = 'none'
+    document.getElementById('nota').textContent = ''
+    document.getElementById('motivo').textContent = datos.mensaje
+    document.getElementById('salida').textContent = datos.salida || '(el motor no dijo nada)'
+    document.getElementById('registro').textContent = datos.registro
+    document.getElementById('malo').style.display = 'block'
+  })
+
+  function verRegistro () { ipcRenderer.invoke('abrir-registro') }
+  function reintentar () {
+    document.getElementById('malo').style.display = 'none'
+    document.getElementById('barra').style.display = 'block'
+    document.getElementById('nota').textContent = 'Volviendo a intentarlo...'
+    ipcRenderer.invoke('reintentar')
+  }
+</script>
+</body>
+</html>

@@ -15,18 +15,22 @@ nombre para que puedas armarla despues.
 
 Se abre en **su propia ventana**, no en el navegador.
 
-### Novedades de esta version
-
-- **Arranca en un segundo**: la version instalada ya no se descomprime entera
-  en cada apertura, y la ventana aparece nada mas hacer doble clic.
-- **Nunca falla en silencio**: cada arranque queda escrito en
-  `%LOCALAPPDATA%\Cortador\arranque.log` y, si algo va mal, se ve el motivo
-  en la propia ventana o en un aviso. En el menu Inicio hay accesos directos a
-  *Registro de arranque* y *Diagnostico de Cortador*.
-- El instalador avisa si al equipo le falta **WebView2** (el motor de la ventana).
-
 Funciona **sin conexion a internet** y todo se procesa en tu propio equipo:
 ningun modelo se sube a ningun servidor.
+
+### Novedades de esta version
+
+- **La aplicacion se ha rehecho sobre Electron**, la misma base que Brumet
+  Slicer: la ventana la pone la propia app, con su Chromium dentro. Ya no
+  depende de WebView2, ni de pythonnet, ni de un ejecutable empaquetado que
+  algunos antivirus paran sin decir nada.
+- El motor de corte va dentro con el **Python oficial de python.org**
+  (firmado), no con PyInstaller.
+- **Nunca falla en silencio**: si el motor no arranca, la ventana lo dice, con
+  lo ultimo que dijo por dentro, un boton de reintentar y otro para abrir el
+  registro (`%LOCALAPPDATA%\Cortador\arranque.log`).
+- La version portable abre la ventana con Edge o Chrome en modo aplicacion,
+  sin barra de direcciones ni pestanas.
 
 ### Que trae
 

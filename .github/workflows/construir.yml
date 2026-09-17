@@ -81,52 +81,60 @@ jobs:
         shell: bash
         run: mv "${{ matrix.origen }}" "${{ matrix.nombre }}"
 
-      - name: Construir la version de carpeta (Windows)
-        if: runner.os == 'Windows'
-        run: python packaging/construir.py --carpeta
-
-      - name: Comprobar la version de carpeta (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          set -e
-          ./dist/Cortador/Cortador.exe --comprobar
-          ./dist/Cortador/Cortador.exe --diagnostico > diagnostico-carpeta.txt
-          cat diagnostico-carpeta.txt
-          grep -q "ventana        : si" diagnostico-carpeta.txt || {
-            echo "::error::La version instalable no encuentra motor de ventana"
-            exit 1
-          }
-
-      - name: Construir el instalador (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) {
-            choco install innosetup -y --no-progress
-          }
-          $version = "${{ inputs.version || github.ref_name }}" -replace '^v',''
-          if (-not $version) { $version = "0.0.0" }
-          & $iscc "/DMiVersion=$version" "packaging\cortador.iss"
-          Get-ChildItem dist
-
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.nombre }}
           path: ${{ matrix.nombre }}
           retention-days: 90
 
-      - name: Subir el instalador
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+  escritorio:
+    # La aplicacion de escritorio de verdad: Electron (su propio Chromium) con
+    # el motor de Python oficial embebido dentro. Es la misma receta que ya
+    # funciona en Brumet Slicer, sin PyInstaller ni WebView2 de por medio.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: Cortador-Setup.exe
-          path: dist/Cortador-Setup.exe
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Armar el motor (Python embebido + Cortador)
+        run: |
+          python -m pip install --upgrade pip
+          python packaging/motor_embebido.py
+
+      - name: Poner la version en la app
+        shell: bash
+        run: |
+          set -e
+          version="${{ inputs.version || github.ref_name }}"
+          version="${version#v}"
+          [ -n "$version" ] || version="0.0.0"
+          cd escritorio
+          npm version "$version" --no-git-tag-version --allow-same-version
+
+      - name: Construir el instalador
+        working-directory: escritorio
+        run: |
+          npm install
+          npx electron-builder --win --publish never
+
+      - name: Ver lo construido
+        shell: bash
+        run: ls -la escritorio/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Cortador-Setup
+          path: escritorio/dist/Cortador-Setup.exe
           retention-days: 90
 
   publicar:
-    needs: construir
+    needs: [construir, escritorio]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || inputs.publicar
     steps:

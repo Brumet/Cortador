@@ -5,26 +5,34 @@ sirviendo la misma interfaz en un servidor local que solo escucha en
 127.0.0.1, pero el usuario ve una ventana normal, con su icono y su barra de
 titulo, sin barra de direcciones ni pestanas.
 
-La ventana aparece primero con una pantalla de espera y el servidor arranca
-detras: asi se ve algo en cuanto se hace doble clic, aunque cargar el motor
-de corte tarde unos segundos. Si algo falla, el motivo se muestra en la
-propia ventana y queda escrito en el registro de arranque.
+Se intenta por este orden, y cada intento queda escrito en el registro:
 
-En Windows usa WebView2 (viene con el sistema). En Linux hace falta
-WebKitGTK (`python3-gi` + `gir1.2-webkit2-4.1`) o Qt (`pip install pyqt5
-pyqtwebengine`). Si no hay ninguna de las dos, avisa y abre el navegador
-como ultimo recurso, para que la app nunca se quede sin arrancar.
+1. **Edge (o Chrome) en modo aplicacion**: una ventana normal, sin barra de
+   direcciones ni pestanas. Es lo mas fiable en Windows porque Edge esta en
+   todos los equipos y no depende de pywebview ni de pythonnet, que es lo que
+   fallaba.
+2. **Ventana nativa con pywebview** (WebView2 en Windows, WebKitGTK o Qt en
+   Linux), si el paso anterior no puede.
+3. **El navegador de siempre**, como ultimo recurso, para que la herramienta
+   nunca se quede sin arrancar.
+
+La ventana aparece *antes* de cargar el motor de corte, con una pantalla de
+espera: asi al hacer doble clic se ve algo enseguida. Si algo falla, el
+motivo se ve en la propia ventana y queda escrito en el registro.
+
+Se puede forzar cualquiera de los tres modos con
+CORTADOR_VENTANA=app|nativa|navegador.
 """
 
 from __future__ import annotations
 
 import os
 import socket
-
 import threading
 import time
-from typing import Tuple
+from typing import Optional, Tuple
 
+from . import ventana as ventana_app
 from .registro import fallo, paso, ruta as ruta_registro
 
 TITULO = "Cortador  ·  by Brumet"
@@ -39,7 +47,7 @@ OK, FALLO_AVISADO, FALLO_MUDO = 0, 1, 2
 
 
 def backend_disponible() -> Tuple[bool, str]:
-    """Comprueba si hay motor de ventana y devuelve (hay, nombre o motivo)."""
+    """Comprueba si hay motor de ventana nativa y devuelve (hay, nombre o motivo)."""
     try:
         import webview  # noqa: F401
     except ImportError:
@@ -95,7 +103,7 @@ def _arrancar_servidor(host: str, port: int):
     return servidor, hilo
 
 
-def _esperar(url: str, servidor, segundos: float = 60.0) -> bool:
+def _esperar(url: str, servidor, segundos: float = 90.0) -> bool:
     """Espera a que el servidor conteste antes de cargar la interfaz."""
     import urllib.request
 
@@ -119,6 +127,36 @@ def _mantener_vivo(url: str) -> None:
             time.sleep(1)
     except KeyboardInterrupt:
         pass
+
+
+class _Motor:
+    """El servidor interno: se arranca una sola vez, lo use quien lo use."""
+
+    def __init__(self, host: str, port: int, url: str):
+        self.host, self.port, self.url = host, port, url
+        self.servidor = None
+        self.listo: Optional[bool] = None
+
+    def asegurar(self) -> bool:
+        """Arranca el servidor si hace falta y espera a que conteste."""
+        if self.listo is not None:
+            return self.listo
+        try:
+            paso("arrancando el servidor interno")
+            self.servidor, _hilo = _arrancar_servidor(self.host, self.port)
+            self.listo = _esperar(self.url, self.servidor)
+            if self.listo:
+                paso("servidor listo")
+            else:
+                fallo("el servidor interno no ha contestado")
+        except Exception as exc:
+            fallo("el servidor interno no ha podido arrancar", exc)
+            self.listo = False
+        return self.listo
+
+    def apagar(self) -> None:
+        if self.servidor is not None:
+            self.servidor.should_exit = True
 
 
 _ESTILO = """
@@ -167,8 +205,9 @@ def _html_error(mensaje: str) -> str:
     <div class="marca">Cortador <span>· by Brumet</span></div>
     <h1 style="margin-top:22px">No he podido arrancar</h1>
     <p>La ventana esta bien, pero el motor interno no ha llegado a responder.
-       Cierra y vuelve a abrir; si sigue igual, manda este archivo de registro
-       y lo miramos:</p>
+       Suele ser el antivirus o el cortafuegos bloqueando 127.0.0.1. Cierra y
+       vuelve a abrir; si sigue igual, manda este archivo de registro y lo
+       miramos:</p>
     <code>{registro}</code>
     <code>{mensaje}</code>
   </div>
@@ -184,22 +223,71 @@ def run(host: str = "127.0.0.1",
     url = f"http://{host}:{port}/"
     paso(f"puerto {port}")
 
-    hay_ventana, motor = backend_disponible()
-    paso(f"motor de ventana: {motor}" if hay_ventana
-         else f"sin motor de ventana: {motor}")
+    modo = (os.environ.get("CORTADOR_VENTANA") or "").strip().lower()
+    if forzar_navegador:
+        modo = "navegador"
+    paso(f"modo de ventana: {modo or 'automatico'}")
 
-    if forzar_navegador or not hay_ventana:
-        return _por_navegador(url, host, port, forzar_navegador, motor)
-    return _con_ventana(url, host, port, motor, debug)
+    motor = _Motor(host, port, url)
+    try:
+        if modo in ("", "app", "edge", "chrome"):
+            codigo = _ventana_de_aplicacion(motor)
+            if codigo is not None:
+                return codigo
+            paso("sin ventana de aplicacion: pruebo la ventana nativa")
+
+        if modo in ("", "app", "edge", "chrome", "nativa", "webview"):
+            hay, nombre = backend_disponible()
+            paso(f"ventana nativa: {nombre}" if hay
+                 else f"sin ventana nativa: {nombre}")
+            if hay:
+                return _con_ventana(motor, nombre, debug)
+
+        return _por_navegador(motor, modo == "navegador")
+    finally:
+        motor.apagar()
 
 
-def _con_ventana(url: str, host: str, port: int, motor: str, debug: bool) -> int:
-    """Abre la ventana ya, y arranca el servidor por detras."""
+def _ventana_de_aplicacion(motor: _Motor):
+    """Edge/Chrome en modo aplicacion. Devuelve None si no se puede usar."""
+    espera = None
+    try:
+        espera = ventana_app.escribir_espera(motor.url, ruta_registro())
+    except Exception as exc:
+        fallo("no se pudo escribir la pagina de espera", exc)
+
+    destino = motor.url
+    if espera:
+        destino = "file:///" + espera.replace("\\", "/").lstrip("/")
+
+    proceso = ventana_app.abrir(destino)
+    if proceso is None:
+        return None
+
+    abierta = time.time()
+    motor.asegurar()
+    try:
+        proceso.wait()
+    except KeyboardInterrupt:
+        pass
+    duracion = time.time() - abierta
+    paso(f"ventana de aplicacion cerrada tras {duracion:.1f}s")
+
+    if duracion < 3.0 and not motor.listo:
+        # se cerro al instante y encima no hay servidor: no ha servido de nada
+        return None
+    if not motor.listo:
+        return FALLO_AVISADO   # la pagina de espera lo ha dicho en pantalla
+    return OK
+
+
+def _con_ventana(motor: _Motor, nombre: str, debug: bool) -> int:
+    """Ventana nativa de pywebview: se abre ya, y el servidor va por detras."""
     import webview
 
-    estado = {"servidor": None, "error": ""}
+    estado = {"error": ""}
 
-    paso("creando la ventana")
+    paso(f"creando la ventana nativa ({nombre})")
     ventana = webview.create_window(
         TITULO, html=_HTML_ESPERA,
         width=ANCHO, height=ALTO, min_size=(1024, 700),
@@ -208,14 +296,10 @@ def _con_ventana(url: str, host: str, port: int, motor: str, debug: bool) -> int
 
     def preparar() -> None:
         try:
-            paso("arrancando el servidor interno")
-            servidor, _hilo = _arrancar_servidor(host, port)
-            estado["servidor"] = servidor
-            if not _esperar(url, servidor):
-                raise RuntimeError(
-                    "El servidor interno no ha respondido en 60 segundos.")
-            paso("servidor listo · cargando la interfaz")
-            ventana.load_url(url)
+            if not motor.asegurar():
+                raise RuntimeError("El servidor interno no ha respondido.")
+            paso("cargando la interfaz en la ventana")
+            ventana.load_url(motor.url)
         except Exception as exc:
             estado["error"] = f"{type(exc).__name__}: {exc}"
             fallo("el servidor interno no arranco", exc)
@@ -235,38 +319,21 @@ def _con_ventana(url: str, host: str, port: int, motor: str, debug: bool) -> int
     except Exception as exc:
         # el motor de ventana esta pero no arranca (falta WebView2, sin sesion
         # grafica...): mejor el navegador que dejar al usuario sin herramienta
-        fallo(f"la ventana ({motor}) no se pudo abrir", exc)
-        servidor = estado.get("servidor")
-        if servidor is None:
-            return _por_navegador(url, host, port, True, motor)
-        print(f"No se ha podido abrir la ventana ({exc}); uso el navegador.")
-        import webbrowser
-        webbrowser.open(url)
-        _mantener_vivo(url)
-    finally:
-        servidor = estado.get("servidor")
-        if servidor is not None:
-            servidor.should_exit = True
+        fallo(f"la ventana nativa ({nombre}) no se pudo abrir", exc)
+        return _por_navegador(motor, True)
 
     paso("ventana cerrada")
     return FALLO_AVISADO if estado["error"] else OK
 
 
-def _por_navegador(url: str, host: str, port: int,
-                   forzar: bool, motor: str) -> int:
+def _por_navegador(motor: _Motor, forzado: bool) -> int:
     """Ultimo recurso: servir la interfaz en el navegador del sistema."""
-    servidor, _hilo = _arrancar_servidor(host, port)
-    if not _esperar(url, servidor):
-        fallo("el servidor interno no arranco (modo navegador)")
-        servidor.should_exit = True
+    if not motor.asegurar():
         return FALLO_MUDO
 
-    if not forzar:
-        print(f"Sin ventana de escritorio ({motor}); abriendo el navegador.")
-        print("Para tener ventana propia instala WebKitGTK o Qt "
-              "(ver README, apartado Instalacion).")
+    if not forzado:
+        print("Sin ventana propia; abriendo el navegador.")
     import webbrowser
-    webbrowser.open(url)
-    _mantener_vivo(url)
-    servidor.should_exit = True
+    webbrowser.open(motor.url)
+    _mantener_vivo(motor.url)
     return OK

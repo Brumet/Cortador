@@ -1,0 +1,49 @@
+{
+  "name": "cortador",
+  "version": "0.5.0",
+  "description": "Cortador - corta modelos 3D para gran formato (by Brumet)",
+  "author": "Brumet",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "motor": "python ../packaging/motor_embebido.py"
+  },
+  "build": {
+    "appId": "com.brumet.cortador",
+    "productName": "Cortador",
+    "publish": null,
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cortador",
+      "artifactName": "Cortador-Setup.${ext}"
+    },
+    "files": [
+      "main.js",
+      "espera.html",
+      "assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "motor/",
+        "to": "motor/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  }
+}

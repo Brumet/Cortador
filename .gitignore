@@ -17,3 +17,8 @@ out/
 dist/
 *.manifest
 packaging/__pycache__/
+
+# aplicacion de escritorio (Electron)
+escritorio/node_modules/
+escritorio/motor/
+escritorio/dist/

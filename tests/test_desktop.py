@@ -7,6 +7,12 @@ import pytest
 from cortador import desktop
 
 
+@pytest.fixture(autouse=True)
+def sin_ventana_de_aplicacion(monkeypatch):
+    """Que las pruebas no abran Edge/Chrome de verdad en la maquina."""
+    monkeypatch.setattr(desktop.ventana_app, "abrir", lambda *a, **k: None)
+
+
 def test_backend_devuelve_motivo():
     hay, texto = desktop.backend_disponible()
     assert isinstance(hay, bool)
@@ -167,3 +173,76 @@ def test_sin_ventana_y_sin_servidor_avisa_quien_llama(monkeypatch):
 
     puerto = desktop.puerto_libre("127.0.0.1", 8981)
     assert desktop.run(port=puerto) == desktop.FALLO_MUDO
+
+
+class ProcesoFalso:
+    """Ventana de aplicacion de mentira: se cierra cuando se le dice."""
+
+    def __init__(self, vive=0.0):
+        self.vive = vive
+        self.cerrado = False
+
+    def wait(self):
+        time.sleep(self.vive)
+        self.cerrado = True
+
+    def poll(self):
+        return 0 if self.cerrado else None
+
+    def terminate(self):
+        self.cerrado = True
+
+
+def test_la_ventana_de_aplicacion_es_el_primer_intento(monkeypatch, tmp_path):
+    """Edge en modo app: ventana de verdad sin depender de WebView2."""
+    abierto = {}
+
+    def abrir(destino, *a, **k):
+        abierto["destino"] = destino
+        return ProcesoFalso()
+
+    monkeypatch.setattr(desktop.ventana_app, "abrir", abrir)
+    monkeypatch.setattr(desktop.ventana_app, "escribir_espera",
+                        lambda url, reg: str(tmp_path / "espera.html"))
+    monkeypatch.setattr(desktop, "backend_disponible",
+                        lambda: pytest.fail("no deberia hacer falta pywebview"))
+
+    puerto = desktop.puerto_libre("127.0.0.1", 8991)
+    assert desktop.run(port=puerto) == desktop.OK
+    assert abierto["destino"].startswith("file:///")
+    assert abierto["destino"].endswith("espera.html")
+
+
+def test_si_la_ventana_de_aplicacion_no_abre_se_prueba_la_nativa(monkeypatch):
+    """Si Edge se cierra al instante y no hay servidor, hay que seguir probando."""
+    monkeypatch.setattr(desktop.ventana_app, "abrir",
+                        lambda *a, **k: ProcesoFalso())
+    monkeypatch.setattr(desktop.ventana_app, "escribir_espera",
+                        lambda url, reg: "")
+    monkeypatch.setattr(desktop, "_esperar", lambda *a, **k: False)
+    monkeypatch.setattr(desktop, "backend_disponible", lambda: (False, "nada"))
+    monkeypatch.setattr(desktop, "_mantener_vivo", lambda url: None)
+
+    puerto = desktop.puerto_libre("127.0.0.1", 8995)
+    assert desktop.run(port=puerto) == desktop.FALLO_MUDO
+
+
+def test_el_servidor_se_arranca_una_sola_vez(monkeypatch):
+    """Cambiar de modo no puede volver a ocupar el mismo puerto."""
+    veces = []
+    original = desktop._arrancar_servidor
+
+    def contar(host, port):
+        veces.append(port)
+        return original(host, port)
+
+    monkeypatch.setattr(desktop, "_arrancar_servidor", contar)
+    motor = desktop._Motor("127.0.0.1", desktop.puerto_libre("127.0.0.1", 8997),
+                           "http://127.0.0.1/")
+    motor.url = f"http://127.0.0.1:{motor.port}/"
+    try:
+        assert motor.asegurar() is True
+        assert motor.asegurar() is True
+    finally:
+        motor.apagar()
+    assert len(veces) == 1
