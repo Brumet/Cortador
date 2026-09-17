@@ -20,20 +20,19 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
-- **Perfiles de maquina**: FLSUN V400, T1 y SR, Bambu A1 y A1 mini, genericas y
-  dos de resina. Cada uno con su margen de seguridad: ninguna pieza se planifica
-  al raz de la cama.
-- **Camas redondas (delta)**: en una FLSUN no cabe el diametro del plato, sino el
-  cuadrado que entra dentro. Ahora se calcula bien: una V400 admite piezas de
-  200 mm de lado, no de 300.
-- **La boquilla manda sobre el espesor de la piel**: 0,4 y 1,0 no imprimen igual,
-  y la pared se ajusta al multiplo exacto del ancho de linea.
-- **Giro del modelo** antes de cortar, en cualquier eje, o apoyando sola la cara
-  mas grande.
-- **Ensamble macho/hembra en rebanadas**: el pasador se encoge para caber en la
-  lamina y en la pared, y la cara que va contra la cama sigue siendo plana.
-- **Resina** como tecnica aparte: pared fina, holgura minima y piezas pequenas.
-- La pantalla de arranque lleva contador y avisa si tarda mas de lo normal.
+- **Se arregla el corte hueco, que estaba al reves.** Antes se cortaba primero y
+  se vaciaba cada trozo despues, asi que cada pieza salia como una cajita
+  cerrada, con paredes en las caras de corte, y los trozos del centro eran cubos
+  huecos que no aportaban nada. Ahora se vacia el modelo entero y se corta esa
+  piel: cada pieza es un trozo de cascara. En Brumo a 1,80 m, **23 litros en vez
+  de 57,8**.
+- Perfiles de maquina (FLSUN V400, T1 y SR, Bambu A1 y A1 mini, genericas y dos
+  de resina), todos con margen de seguridad.
+- **Camas redondas**: en una delta cabe el cuadrado inscrito, no el diametro.
+- El **espesor de la piel sale de la boquilla**, siempre multiplo del ancho de linea.
+- **Giro del modelo** antes de cortar.
+- **Macho y hembra en rebanadas**, ajustado al espesor de la lamina.
+- Contador y aviso de lentitud en la pantalla de arranque.
 
 ### Que trae
 
