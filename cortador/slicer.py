@@ -13,10 +13,11 @@ import trimesh
 from shapely.geometry import box as shapely_box
 
 from .config import SliceConfig, axis_index
-from .geometry import (EPS, clip_slab, extrude_polygons, largest_polygon,
+from .geometry import (EPS, clip_slab, extrude_polygons, hilos, largest_polygon,
                        merge_polygons, plane_transform, section_polygons)
 from . import joinery as jn
-from .hollow import hollow_mesh, hollow_region, hollow_slab, limpiar, savings
+from .hollow import (espesor_recomendado, hollow_mesh, hollow_region,
+                     hollow_slab, limpiar, medir_pared, savings)
 from .font import text_size
 from .labels import apply_label
 from .meshio import apply_units_and_scale, is_empty, mesh_stats
@@ -192,11 +193,33 @@ def slice_model(mesh: trimesh.Trimesh,
     piel = False
     if cfg.hollow and cfg.mode == "chunks":
         report(0, 1, "Solidificando la piel")
+        macizo = work
         hueca, aviso = hollow_mesh(work, cfg.wall,
                                    report=lambda texto: report(0, 1, texto))
         if aviso is None and hueca is not work and not is_empty(hueca):
             work = hueca
             piel = True
+            # el espesor no se da por supuesto: se mide sobre la piel que ha
+            # salido y se dice. Una pared mas fina de la cuenta no se pega bien
+            # y complica el ensamble, asi que es un numero que hay que ver.
+            medida = medir_pared(macizo, work)
+            if medida is not None:
+                # se da el percentil 1 y no el minimo absoluto: el minimo de un
+                # muestreo lo marca siempre alguna esquirla del borde donde la
+                # camara se cierra, y no dice nada util de la pieza
+                _minimo, p1, mediana = medida
+                aviso_pared = (f"Pared medida sobre la piel: el 1 % mas fino "
+                               f"queda en {p1:.1f} mm y la mediana en "
+                               f"{mediana:.1f} mm (pedidos {cfg.wall:g} mm).")
+                pedir = espesor_recomendado(cfg.wall, medida)
+                if pedir is not None:
+                    aviso_pared += (
+                        " En un escaneo la cara de fuera tiene relieve y la de"
+                        " dentro es lisa, asi que por los valles la pared se"
+                        f" queda corta. Si necesitas {cfg.wall:g} mm de minimo,"
+                        f" pide {pedir:g}."
+                    )
+                warnings.append(aviso_pared)
         else:
             # vaciar despues, trozo a trozo, no es una alternativa: cada trozo
             # sale como una cajita cerrada con paredes en las caras de corte,
@@ -295,23 +318,8 @@ def slice_model(mesh: trimesh.Trimesh,
 # ---------------------------------------------------------------------------
 
 def hilos_de_corte() -> int:
-    """Cuantos hilos se reparten el corte.
-
-    El trabajo caro es el CSG, que esta en C++ y suelta el interprete mientras
-    calcula, asi que repartir las bandas entre hilos aprovecha los nucleos de
-    verdad. Medido en una banda de 1,3 M de triangulos: x1,45 con cuatro
-    nucleos.
-
-    Son hilos y no procesos a proposito. En la app instalada, Python va
-    embebido dentro de Electron, y lanzar procesos hijos ahi es justo la clase
-    de cosa que falla en silencio en el ordenador de otro. Con
-    CORTADOR_HILOS=1 se desactiva.
-    """
-    try:
-        pedido = int(os.environ.get("CORTADOR_HILOS") or 0)
-    except ValueError:
-        pedido = 0
-    return max(1, min(8, pedido or (os.cpu_count() or 1)))
+    """Cuantos hilos se reparten el corte (ver `geometry.hilos`)."""
+    return hilos()
 
 
 def _build_chunks(mesh: trimesh.Trimesh,

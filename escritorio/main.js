@@ -103,7 +103,20 @@ function lanzarMotor (puerto) {
   }
   proceso.stdout.on('data', recoger)
   proceso.stderr.on('data', recoger)
-  proceso.on('exit', (codigo) => anotar(`el motor termino con codigo ${codigo}`))
+  proceso.on('exit', (codigo, senal) => {
+    anotar(`el motor termino con codigo ${codigo} (senal ${senal})`)
+    // Si el motor se muere con la ventana abierta, la pantalla se quedaria
+    // girando para siempre: eso es justo lo que no puede pasar. El caso tipico
+    // es un modelo enorme que agota la memoria y el sistema mata el proceso.
+    if (cerrando) return
+    const porMemoria = senal === 'SIGKILL' || codigo === 137 || codigo === 3221225477
+    fallar(porMemoria
+      ? 'El motor se ha quedado sin memoria y el sistema lo ha cerrado. ' +
+        'Suele pasar con modelos de muchos millones de triangulos: prueba a ' +
+        'bajar la altura del modelo, a subir el espesor de piel o a cerrar ' +
+        'otros programas para dejarle mas memoria.'
+      : `El motor se ha cerrado inesperadamente (codigo ${codigo}).`)
+  })
   proceso.on('error', (err) => anotar(`ERROR al lanzar el motor: ${err.message}`))
   return proceso
 }
@@ -112,6 +125,7 @@ function lanzarMotor (puerto) {
    La app se actualiza sola: mira si hay version nueva en las Releases, se la
    baja por detras y la instala al cerrar. No hay que volver a descargar nada
    a mano ni desinstalar la anterior: se sobrescribe encima.                */
+let cerrando = false        // para no gritar cuando el motor muere al salir
 let actualizador = null
 
 function prepararActualizador () {
@@ -269,9 +283,12 @@ ipcMain.handle('buscar-actualizacion', () => {
 })
 ipcMain.handle('reintentar', () => { arrancar() })
 
+app.on('before-quit', () => { cerrando = true })
+
 app.whenReady().then(arrancar)
 
 app.on('window-all-closed', () => {
+  cerrando = true
   if (motor && motor.exitCode === null) {
     try { motor.kill() } catch (e) { /* ya estaba muerto */ }
   }

@@ -263,8 +263,10 @@ ya dan mas de 3 mm de pared: fuerte, rapido y con poquisimo material.
 
 Una pieza con la pared ya solidificada a 3 mm se lamina con **relleno al 0 %**:
 el laminador solo recorre perimetros. No hay relleno que calcular ni que
-imprimir. En la carpeta de salida tienes un `AJUSTES_LAMINADOR.txt` con los
-numeros exactos para tu perfil:
+imprimir. Las capas que cierran por encima del hueco se imprimen en puente, al
+aire: no hace falta meter relleno para sostenerlas, lo que las sostiene es el
+**ventilador de capa** a tope y una velocidad de puente baja. En la carpeta de
+salida tienes un `AJUSTES_LAMINADOR.txt` con los numeros exactos para tu perfil:
 
 ```
   Relleno (infill) . . . . . . . 0 %
@@ -310,15 +312,39 @@ Si un trozo no admite todo el espesor pedido se prueba con algo menos antes de
 rendirse, y si nada funciona **las piezas salen macizas y se dice por que**:
 nunca se entregan esquirlas.
 
-### La pared nunca llega a cero
+### El espesor que sale, medido y dicho
 
-Donde el modelo es mas fino que dos paredes, la superficie desplazada sale por el
-otro lado y la resta dejaria dos caras pegadas sin nada de material entre ellas.
-Esa pieza ya no es un solido: no se puede medir, el laminador la rechaza y en la
-vista previa se ve rota. Para evitarlo, el interior se recorta contra una
-**guarda**: la misma superficie metida hacia dentro unas decimas de milimetro, un
-avance tan corto que no puede cruzarse consigo mismo. En los sitios finos la
-pared se queda en esas decimas en vez de en cero: fina, pero pieza cerrada.
+Aqui hay una tension real y conviene saberla: **la cara de fuera tiene relieve y
+la de dentro es lisa, asi que la pared no puede medir lo mismo en todas partes**.
+La cara interior pasa por la media del relieve: por los picos sobra pared y por
+los valles falta, y lo que falta es justo la profundidad del relieve.
+
+Probe las dos formas de taparlo y las medi:
+
+- **Recortar el interior contra el modelo** (vaciado por capas) garantiza el
+  espesor, pero le devuelve el relieve al interior: el grano de la cara interior
+  sube de 3,2 a 10,6 grados y sale escalonada. Es justo lo que no se quiere.
+- **Hundir la cara interior entera** mantiene el interior liso, pero en un
+  escaneo denso la superficie desplazada se cruza consigo misma en los pliegues
+  y esos puntos no bajan por mucho que se insista: en el modelo de dos metros el
+  percentil 1 no se movio y el material se duplico.
+
+Asi que Cortador no promete lo que no puede cumplir: **mide la pared que ha
+salido y lo dice**, con lo que habria que pedir para que el minimo real sea el
+que quieres:
+
+```
+Pared medida sobre la piel: el 1 % mas fino queda en 1,2 mm y la mediana en
+5,2 mm (pedidos 3 mm). En un escaneo la cara de fuera tiene relieve y la de
+dentro es lisa, asi que por los valles la pared se queda corta. Si necesitas
+3 mm de minimo, pide 4,8.
+```
+
+Y funciona: pidiendo esos 4,8 mm, el 1 % mas fino sale en 3,05 mm. El desfase
+es el relieve del modelo y se mantiene al subir el espesor, asi que sumarlo
+basta. Se da el percentil 1 y no el minimo absoluto porque el minimo de un
+muestreo lo marca siempre alguna esquirla del borde donde la camara se cierra,
+y eso no dice nada util de la pieza.
 
 ### Cortar una piel se hace con CSG
 

@@ -20,36 +20,34 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
-- **Se arregla el vaciado de escaneos grandes.** Un lobo de 1,9 M de triangulos
-  a 1,9 m salia en 220 piezas rotas, 0,3 L de material y un "100 % menos" que
-  era imposible. Eran cuatro fallos encadenados: soldar la piel la rompia,
-  cortar una cascara con el recorte rapido dejaba agujeros, el material se
-  contaba sumando solo las piezas cerradas (las demas valian cero) y el limite
-  para dar por buena una piel era un porcentaje fijo que una figura de dos
-  metros nunca alcanza. En el mismo modelo: **de 158 piezas abiertas a
-  ninguna**, y el material que se anuncia es el que se va a gastar.
-
 - **La vista previa ya no engana.** Para que todo cupiera en su presupuesto de
   triangulos, el visor aligeraba cada pieza; en una piel de 3 mm eso funde las
   dos caras y la pared desaparece. Los STL estaban bien, pero **en pantalla se
   veia un amasijo de picos**. Ahora una pieza solo se aligera si sigue siendo la
-  misma pieza, y el techo de triangulos es ocho veces mayor.
+  misma pieza -cerrada y con el mismo volumen- y el techo de triangulos es ocho
+  veces mayor.
 
-- **El corte usa todos los nucleos.** Las bandas se reparten entre hilos. En un
-  escaneo de 1,3 M de triangulos con cuatro nucleos: **157 s -> 133 s**.
+- **El espesor de la pared se mide y se dice.** En un escaneo, la cara de fuera
+  tiene relieve y la de dentro es lisa, asi que la pared no puede medir lo mismo
+  en todas partes. En vez de prometerlo, Cortador siembra puntos por toda la
+  piel, mide lo que hay hasta la superficie y te dice el resultado y que espesor
+  pedir para que el minimo sea el que quieres. Probado: si pides 3 y el 1 % mas
+  fino sale en 1,2, pidiendo 4,8 sale en 3,05.
 
-- **Vaciado por capas, de reserva.** Si el desplazamiento de la superficie no
-  entrega una piel cerrada, se corta el modelo en secciones, se encoge cada una
-  y se apilan. Encoger un contorno plano no puede cruzarse nunca. Y si nada
-  funciona, las piezas salen macizas y se dice por que: **nunca se entregan
-  esquirlas**.
+- **El corte usa todos los nucleos** y el vaciado tambien. En un escaneo de
+  1,3 M de triangulos con cuatro nucleos: 157 s -> 133 s el corte, y x2,9 el
+  encogido de contornos.
 
-- **La pared nunca llega a cero.** Donde el modelo es mas fino que dos paredes,
-  antes quedaban dos caras pegadas sin material entre ellas y el laminador
-  rechazaba la pieza. Ahora queda pared fina, pero pieza cerrada.
+- **Menos memoria.** El vaciado por capas llegaba a diez gigas y el sistema
+  mataba el proceso. Ahora las rebanadas se guardan como triangulos sueltos en
+  vez de como mallas y se sueltan en cuanto no hacen falta.
 
-- **Se quita el vaciado trozo a trozo**, que era lo que llenaba el centro de la
-  figura de cajitas huecas.
+- **Si el motor se muere, la ventana se entera.** Antes se quedaba girando para
+  siempre; ahora dice que ha pasado y por que.
+
+- **Los ajustes del laminador hablan del ventilador.** Con 0 % de relleno, las
+  capas que cierran sobre el hueco van en puente: no hace falta relleno para
+  sostenerlas, hace falta ventilador de capa a tope y velocidad de puente baja.
 
 ### Que trae
 

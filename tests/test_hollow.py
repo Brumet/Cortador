@@ -693,3 +693,109 @@ def test_cortar_con_varios_hilos_da_exactamente_lo_mismo():
 
     assert [p.name for p in uno.pieces] == [p.name for p in varios.pieces]
     assert abs(uno.hollow_volume - varios.hollow_volume) < 1e-6
+
+
+# ------------------------------------------- el espesor de pared se cumple
+def _erizo(radio=60.0, pico=1.9, subdivisiones=4, cada=5):
+    """Una esfera con picos: los picos son mas finos que dos paredes."""
+    import trimesh
+    m = trimesh.creation.icosphere(subdivisions=subdivisiones, radius=radio)
+    v = m.vertices.copy()
+    v[np.arange(0, len(v), cada)] *= pico
+    m.vertices = v
+    m.fix_normals()
+    return m
+
+
+def test_la_pared_que_sale_se_mide_y_se_recomienda_la_que_hay_que_pedir():
+    """En un escaneo la pared no puede ser igual en todas partes.
+
+    La cara interior es lisa y la de fuera no: por los picos sobra pared y por
+    los valles falta, y lo que falta es el relieve del modelo. Eso no se puede
+    tapar sin devolverle la textura al interior, asi que se **mide** y se dice
+    que espesor habria que pedir para que el minimo real sea el que se quiere.
+    """
+    from cortador.hollow import espesor_recomendado, hollow_mesh, medir_pared
+
+    modelo = _peluda(subdivisiones=5, amplitud=6.0, frecuencia=3.0, radio=120.0)
+    pared = 5.0
+    piel, aviso = hollow_mesh(modelo, pared)
+    assert aviso is None
+
+    medida = medir_pared(modelo, piel, muestras=8000)
+    assert medida is not None
+    pedir = espesor_recomendado(pared, medida)
+    assert pedir is not None and pedir > pared
+
+    # y pidiendo eso, el minimo real sube de verdad
+    gruesa, _ = hollow_mesh(modelo, pedir)
+    assert medir_pared(modelo, gruesa, 8000)[1] > medida[1]
+
+
+def test_medir_pared_ve_una_piel_fina():
+    """La medida tiene que detectar de verdad una pared delgada."""
+    import trimesh
+    from cortador.hollow import medir_pared
+
+    fuera = trimesh.creation.icosphere(subdivisions=4, radius=60.0)
+    dentro = trimesh.creation.icosphere(subdivisions=4, radius=59.0)
+    piel = trimesh.boolean.difference([fuera, dentro])
+
+    medida = medir_pared(fuera, piel, muestras=4000)
+    assert medida is not None
+    assert 0.7 < medida[2] < 1.3        # la mediana es ese milimetro de pared
+
+
+def test_el_informe_dice_el_espesor_que_ha_salido():
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150.0)
+    res = slice_model(esfera, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                          hollow=True, wall=4.0,
+                                          labels=LabelOptions(enabled=False)))
+    assert any("Pared medida" in a and "mediana" in a for a in res.warnings), res.warnings
+
+
+def test_los_ajustes_hablan_del_ventilador_y_no_del_relleno():
+    """Con 0 % de relleno, lo que sostiene las capas de arriba es el ventilador."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.exporters import slicer_settings
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=3, radius=150.0)
+    res = slice_model(esfera, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                          hollow=True, wall=4.0,
+                                          labels=LabelOptions(enabled=False)))
+    texto = slicer_settings(res)
+    assert "0 %" in texto
+    assert "entilador" in texto
+    assert "puente" in texto
+
+
+def test_la_cara_interior_no_lleva_la_textura_del_modelo():
+    """Lo que Brumet pidio: por fuera todo el pelo, por dentro liso.
+
+    Garantizar el espesor recortando el interior contra el modelo le devolveria
+    el relieve y saldria escalonado, asi que no se hace: el interior es la forma
+    lisa y punto.
+    """
+    import numpy as np
+    import trimesh
+    from cortador.hollow import hollow_mesh
+
+    def grano(malla):
+        return float(np.degrees(np.asarray(malla.face_adjacency_angles)).mean())
+
+    modelo = _peluda(subdivisiones=5, amplitud=6.0, frecuencia=3.0, radio=120.0)
+    piel, aviso = hollow_mesh(modelo, 5.0)
+    assert aviso is None
+
+    # la cara interior son los triangulos que quedan lejos de la superficie
+    centros = piel.triangles_center
+    _, distancia, _ = trimesh.proximity.closest_point(modelo, centros)
+    dentro = piel.submesh([np.where(distancia > 1.0)[0]], append=True)
+
+    assert grano(dentro) < grano(modelo) * 0.35, (grano(dentro), grano(modelo))

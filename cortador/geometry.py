@@ -14,6 +14,39 @@ from .meshio import is_empty
 EPS = 1e-7
 
 
+def hilos() -> int:
+    """Cuantos hilos se reparten un trabajo largo.
+
+    Lo caro de cortar y de vaciar esta en C++ -el motor booleano, shapely- y
+    suelta el interprete mientras calcula, asi que repartirlo entre hilos
+    aprovecha los nucleos de verdad. Medido: x1,45 el corte y x2,9 el encogido
+    de contornos, con cuatro nucleos.
+
+    Son hilos y no procesos a proposito. En la app instalada, Python va
+    embebido dentro de Electron, y lanzar procesos hijos ahi es justo la clase
+    de cosa que falla en silencio en el ordenador de otro. Con CORTADOR_HILOS=1
+    se desactiva.
+    """
+    import os
+    try:
+        pedido = int(os.environ.get("CORTADOR_HILOS") or 0)
+    except ValueError:
+        pedido = 0
+    return max(1, min(8, pedido or (os.cpu_count() or 1)))
+
+
+def en_paralelo(funcion, elementos):
+    """Aplica `funcion` a cada elemento, repartiendo entre hilos si compensa."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    elementos = list(elementos)
+    obreros = min(hilos(), len(elementos))
+    if obreros <= 1:
+        return [funcion(x) for x in elementos]
+    with ThreadPoolExecutor(max_workers=obreros) as equipo:
+        return list(equipo.map(funcion, elementos))
+
+
 def unit(axis: int) -> np.ndarray:
     v = np.zeros(3)
     v[axis] = 1.0

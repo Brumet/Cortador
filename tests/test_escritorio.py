@@ -114,3 +114,17 @@ def test_la_compilacion_publica_el_archivo_que_avisa_de_la_version():
         texto = fh.read()
     assert "escritorio/dist/latest.yml" in texto
     assert "la app no podria actualizarse sola" in texto
+
+
+def test_si_el_motor_se_muere_la_ventana_se_entera():
+    """Un modelo enorme puede agotar la memoria y que el sistema mate el motor.
+
+    Si eso pasa con la ventana abierta, la pantalla se quedaria girando para
+    siempre sin decir nada, que es justo lo que no puede pasar.
+    """
+    with open(os.path.join(APP, "main.js"), encoding="utf-8") as fh:
+        main = fh.read()
+    assert "proceso.on('exit'" in main
+    assert "cerrando" in main                 # no grita cuando se cierra a proposito
+    assert "sin memoria" in main
+    assert "SIGKILL" in main
