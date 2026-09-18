@@ -132,7 +132,8 @@ def hollow_slab(slab: trimesh.Trimesh,
 
 
 def hollow_mesh(mesh: trimesh.Trimesh,
-                wall: float) -> Tuple[trimesh.Trimesh, Optional[str]]:
+                wall: float,
+                report=None) -> Tuple[trimesh.Trimesh, Optional[str]]:
     """Convierte la malla entera en una cascara de `wall` mm de pared.
 
     Devuelve (malla, aviso). Si el vaciado no sale bien se devuelve la malla
@@ -150,33 +151,248 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         return mesh, (f"La pared de {wall:g} mm no cabe en un modelo de "
                       f"{grosor_minimo:.1f} mm de grueso: se deja macizo.")
 
-    # se prueba con el espesor pedido y, si la pieza no admite tanto, con algo
-    # menos: mas vale una pared un poco mas fina que una pieza rota
-    # se prueba con el espesor pedido y, si la pieza no lo admite, con algo menos.
-    # Se prefiere el resultado que ademas queda cerrado al soldar los vertices,
-    # que es como lo vera el laminador, pero no se descarta uno valido por eso.
+    # Dos herramientas distintas, de mas fina a mas robusta:
+    #
+    #   1. desplazamiento de la superficie (tipo *Solidify*). Es rapido y deja
+    #      la cara interior lisa, pero en un escaneo con picos o con paredes
+    #      finas el desplazamiento se cruza consigo mismo.
+    #   2. vaciado por capas. Se corta el modelo en secciones horizontales, se
+    #      encoge cada seccion `wall` milimetros y se apilan. Encoger un
+    #      contorno plano no puede cruzarse nunca, asi que esto no falla; a
+    #      cambio la cara interior queda escalonada en vez de lisa.
+    #
+    # Se usa la segunda solo cuando la primera no entrega una piel cerrada.
+    def _avisar(texto):
+        if report is not None:
+            try:
+                report(texto)
+            except Exception:
+                pass
+
     reserva = None
-    for factor in (1.0, 0.75, 0.5):
+    for factor in (1.0, 0.8, 0.6):
+        _avisar("Solidificando la piel")
         interior = _superficie_interior(mesh, wall * factor)
         if interior is None:
-            return mesh, "No se han podido calcular las normales para vaciar el modelo."
-        cascara = boolean_op("difference", mesh, interior)
-        if cascara is None:
-            continue
-        cascara = _soldar(cascara)
-        if not _es_piel(cascara, mesh):
+            break
+        cascara = _cascara(mesh, interior)
+        if cascara is None or not _es_piel(cascara, mesh, wall * factor):
             continue
         if cascara.is_watertight:
             return cascara, None
         if reserva is None:
             reserva = cascara
+
+    _avisar("Vaciando por capas")
+    cascara = _piel_por_capas(mesh, wall, _avisar)
+    if cascara is not None and _es_piel(cascara, mesh, wall) and cascara.is_watertight:
+        return cascara, None
+
     if reserva is not None:
+        # hay piel, pero con alguna membrana de espesor cero donde el modelo es
+        # mas fino que la pared. Se entrega: el laminador la repara solo.
         return reserva, None
     return mesh, ("Este trozo no admite el vaciado (recovecos muy cerrados o "
                   "paredes mas finas que el espesor): se deja macizo.")
 
 
-def _es_piel(cascara: trimesh.Trimesh, original: trimesh.Trimesh) -> bool:
+def _cascara(mesh: trimesh.Trimesh,
+             interior: trimesh.Trimesh) -> Optional[trimesh.Trimesh]:
+    """Resta el interior del modelo y deja la piel lista para cortar.
+
+    El motor booleano ya entrega una malla cerrada. Soldar vertices encima solo
+    sirve para comprobar como la vera el laminador, **nunca para sustituirla**:
+    donde la pared queda a espesor cero (un pico mas fino que la piel) el
+    soldado funde las dos caras y aparecen aristas con cuatro triangulos. Una
+    malla asi ya no se puede cortar en trozos cerrados, y todo lo que viene
+    despues -el volumen, el ahorro, la vista previa- sale mal.
+    """
+    return _cascara_limpia(boolean_op("difference", mesh, interior))
+
+
+#: maximo de secciones horizontales del vaciado por capas. Con muchas mas, un
+#: modelo de dos metros tardaria demasiado; con menos, el escalon se nota.
+CAPAS_MAX = 900
+
+
+def _piel_por_capas(mesh: trimesh.Trimesh,
+                    wall: float,
+                    avisar=None) -> Optional[trimesh.Trimesh]:
+    """Vaciado por secciones: la herramienta que no se rompe nunca.
+
+    En vez de empujar la superficie hacia dentro -que en un escaneo con picos
+    acaba cruzandose consigo misma y dejando la pieza hecha migajas- se corta el
+    modelo en secciones horizontales, se encoge cada seccion `wall` milimetros
+    con el mismo encogido exacto que ya se usa en el modo laminas, y se apila lo
+    que queda. Encoger un contorno plano es una operacion 2D: no puede cruzarse,
+    no puede dar la vuelta y, donde la pieza es mas fina que la pared, el
+    contorno encogido simplemente desaparece y ahi el modelo queda macizo, que
+    es justo lo correcto.
+
+    Para que la piel tambien tenga espesor **por arriba y por abajo** no basta
+    con encoger cada seccion por su cuenta: una seccion se encoge en X e Y, pero
+    en Z hay que mirar las vecinas. Por eso cada rebanada del interior se
+    interseca ademas con las secciones que quedan a menos de `wall` de
+    distancia, encogidas lo que marca la esfera de radio `wall`. Asi la bola de
+    la pared cabe entera dentro del modelo en cualquier direccion.
+
+    A cambio, la cara interior queda escalonada en vez de lisa. No se ve y no se
+    imprime, pero por eso este camino es el de reserva y no el principal.
+    """
+    def paso(texto):
+        if avisar is not None:
+            avisar(texto)
+
+    wall = float(wall)
+    lo, hi = float(mesh.bounds[0][2]), float(mesh.bounds[1][2])
+    util = (hi - wall) - (lo + wall)
+    if util <= wall:
+        return None                      # no hay sitio para nada de hueco
+
+    bandas = max(1, min(CAPAS_MAX, int(round(util / wall))))
+    altura = util / bandas
+    planos = (lo + wall) + np.arange(bandas + 1) * altura
+
+    paso("Cortando secciones")
+    secciones = _secciones(mesh, planos)
+    if secciones is None:
+        return None
+
+    paso("Encogiendo cada seccion")
+    # margen de simplificacion: los contornos de un escaneo traen miles de
+    # puntos y apilarlos tal cual daria una malla interior de veinte millones de
+    # triangulos que ningun motor booleano digiere. Se encoge `tol` mm de mas y
+    # luego se simplifica otro tanto: la pared queda ese pelo mas gruesa, que es
+    # el lado seguro, y la malla interior baja a una decima parte.
+    tol = max(0.2, wall * 0.15)
+    cache = {}
+
+    def encogida(indice: int, radio: float):
+        """Seccion `indice` encogida `radio` mm, guardada para no repetirla."""
+        clave = (indice, round(float(radio) / 0.05))
+        if clave in cache:
+            return cache[clave]
+        base = secciones[indice]
+        if base is None or base.is_empty:
+            valor = None
+        elif radio <= 1e-6:
+            valor = base
+        else:
+            try:
+                valor = base.buffer(-float(radio))
+                if not valor.is_valid:
+                    valor = valor.buffer(0)
+            except Exception:
+                valor = None
+            if valor is not None and valor.is_empty:
+                valor = None
+        cache[clave] = valor
+        return valor
+
+    prismas = [[], []]           # pares e impares: nunca se tocan entre si
+    for k in range(bandas):
+        z0, z1 = float(planos[k]), float(planos[k + 1])
+        perfil = None
+        alcance = int(wall / altura) + 2      # secciones que toca la bola
+        for j in range(max(0, k - alcance), min(len(planos), k + 2 + alcance)):
+            distancia = max(planos[j] - z1, z0 - planos[j], 0.0)
+            if distancia >= wall:
+                continue             # esa seccion cae fuera de la bola
+            radio = float(np.sqrt(max(wall * wall - distancia * distancia, 0.0)))
+            trozo = encogida(j, radio + tol)
+            if trozo is None:
+                perfil = None
+                break
+            perfil = trozo if perfil is None else perfil.intersection(trozo)
+            if perfil is None or perfil.is_empty:
+                perfil = None
+                break
+        if perfil is None or perfil.is_empty:
+            continue
+        perfil = perfil.simplify(tol)
+        if not perfil.is_valid:
+            perfil = perfil.buffer(0)
+        if perfil.is_empty or perfil.area <= EPS:
+            continue
+        bloque = extrude_polygons(perfil, z1 - z0)
+        if bloque is None:
+            continue
+        if not bloque.is_volume:
+            bloque.merge_vertices()
+            bloque.fix_normals()
+            if not bloque.is_volume:
+                continue       # un contorno imposible de triangular: se salta
+        bloque.apply_translation([0.0, 0.0, z0])
+        prismas[k % 2].append(bloque)
+
+    if not prismas[0] and not prismas[1]:
+        return None
+
+    paso("Restando el interior")
+    cascara = mesh
+    for grupo in prismas:
+        if not grupo:
+            continue
+        # dentro de un mismo grupo las rebanadas estan separadas por la altura
+        # de una banda entera, asi que no se tocan y se pueden restar de golpe
+        nucleo = (grupo[0] if len(grupo) == 1
+                  else trimesh.util.concatenate(grupo))
+        resultado = boolean_op("difference", cascara, nucleo)
+        if resultado is None:
+            return None
+        cascara = resultado
+    if cascara is mesh:
+        return None
+    return _cascara_limpia(cascara)
+
+
+def _secciones(mesh: trimesh.Trimesh, planos) -> Optional[List]:
+    """Contorno relleno del modelo en cada altura, de una sola pasada."""
+    from shapely.ops import unary_union
+    from trimesh.intersections import mesh_multiplane
+
+    try:
+        lineas, _tos, _caras = mesh_multiplane(
+            mesh, np.zeros(3), np.array([0.0, 0.0, 1.0]), np.asarray(planos, dtype=float))
+    except Exception:
+        return None
+
+    salida = []
+    for segmentos in lineas:
+        if len(segmentos) == 0:
+            salida.append(None)
+            continue
+        try:
+            camino = trimesh.load_path(segmentos)
+            poligonos = [p for p in camino.polygons_full
+                         if p is not None and not p.is_empty]
+        except Exception:
+            poligonos = []
+        if not poligonos:
+            salida.append(None)
+            continue
+        try:
+            unido = unary_union(poligonos)
+        except Exception:
+            salida.append(None)
+            continue
+        salida.append(None if unido.is_empty else unido)
+    return salida
+
+
+def _cascara_limpia(cruda: Optional[trimesh.Trimesh]) -> Optional[trimesh.Trimesh]:
+    """Deja la piel como la vera el laminador, sin romperla si ya estaba bien."""
+    if cruda is None:
+        return None
+    if cruda.is_watertight:
+        return cruda
+    limpia = _soldar(cruda)
+    return limpia if limpia.is_watertight else cruda
+
+
+def _es_piel(cascara: trimesh.Trimesh,
+             original: trimesh.Trimesh,
+             wall: float = 0.0) -> bool:
     """Comprueba que lo que salio del vaciado es una piel y no migajas.
 
     La comprobacion util no es el volumen sino la **superficie**: una piel bien
@@ -185,6 +401,12 @@ def _es_piel(cascara: trimesh.Trimesh, original: trimesh.Trimesh) -> bool:
     mismo y la resta se comio el modelo, el area se desploma; eso es lo que
     hay que rechazar, en vez de entregar un monton de esquirlas y decir que se
     ahorro el 100 % del material.
+
+    El volumen tambien se mira, pero comparado con lo que **deberia** medir esa
+    piel (superficie x espesor), no con un porcentaje fijo del modelo. Un
+    porcentaje fijo no vale: la piel de una figura de dos metros con 3 mm de
+    pared es menos del 0,5 % del bloque macizo, y con el limite de antes se
+    rechazaba una piel perfectamente buena.
     """
     if cascara is None or cascara.is_empty or not len(cascara.faces):
         return False
@@ -192,8 +414,15 @@ def _es_piel(cascara: trimesh.Trimesh, original: trimesh.Trimesh) -> bool:
         return False
     if cascara.area < original.area * 1.05:
         return False
-    proporcion = float(cascara.volume) / float(original.volume)
-    return 0.005 < proporcion < 0.995
+    volumen = float(cascara.volume)
+    if not (0.0 < volumen < float(original.volume) * 0.999):
+        return False
+    if wall and wall > 0:
+        # una piel de `wall` mm mide, como poco, media superficie por espesor
+        minimo = min(float(original.area) * float(wall) * 0.5,
+                     float(original.volume) * 0.5)
+        return volumen >= minimo
+    return volumen > float(original.volume) * 0.005
 
 
 def _soldar(malla: trimesh.Trimesh) -> trimesh.Trimesh:
@@ -348,13 +577,26 @@ def _superficie_interior(mesh: trimesh.Trimesh,
     El desplazamiento se hace sobre la copia suavizada (`_base_interior`), no
     sobre la malla original: asi el interior queda liso aunque el modelo sea un
     escaneo lleno de grano.
+
+    Al final se recorta con una *guarda* (ver `_recortar_con_guarda`), que es lo
+    que impide que la cara de dentro llegue a tocar la de fuera.
     """
     rugosidad = _rugosidad(mesh) if len(mesh.faces) > CARAS_DENSAS else 0.0
-    mesh = _base_interior(mesh, wall)
+    base = _base_interior(mesh, wall)
     # La copia suavizada pasa por la media de la superficie, asi que en los
     # valles la pared se quedaria corta justo esa rugosidad. Se compensa
     # hundiendo un poco mas la cara interior: mejor 1 mm de mas que un agujero.
-    wall = float(wall) + min(rugosidad, float(wall))
+    avance = float(wall) + min(rugosidad, float(wall))
+    interior = _desplazar(base, avance, intentos)
+    if interior is None:
+        return None
+    return _recortar_con_guarda(mesh, interior, wall, intentos)
+
+
+def _desplazar(mesh: trimesh.Trimesh,
+               avance: float,
+               intentos: int = 6) -> Optional[trimesh.Trimesh]:
+    """Mete la superficie `avance` mm hacia dentro, sin dejar que se de la vuelta."""
     try:
         normales = np.asarray(mesh.vertex_normals, dtype=float)
     except Exception:
@@ -363,17 +605,17 @@ def _superficie_interior(mesh: trimesh.Trimesh,
         return None
 
     originales = np.asarray(mesh.face_normals, dtype=float)
-    avance = np.full(len(mesh.vertices), float(wall))
+    paso = np.full(len(mesh.vertices), float(avance))
     interior = mesh.copy()
     for _ in range(intentos):
-        interior.vertices = mesh.vertices - normales * avance[:, None]
+        interior.vertices = mesh.vertices - normales * paso[:, None]
         nuevas = np.asarray(interior.face_normals, dtype=float)
         if len(nuevas) != len(originales):
             break
         vueltas = np.einsum("ij,ij->i", nuevas, originales) < 0.0
         if not vueltas.any():
             break
-        avance[np.unique(mesh.faces[vueltas])] *= 0.5
+        paso[np.unique(mesh.faces[vueltas])] *= 0.5
 
     interior.update_faces(interior.nondegenerate_faces())
     interior.remove_unreferenced_vertices()
@@ -386,12 +628,46 @@ def _superficie_interior(mesh: trimesh.Trimesh,
     return interior
 
 
+def _recortar_con_guarda(mesh: trimesh.Trimesh,
+                         interior: trimesh.Trimesh,
+                         wall: float,
+                         intentos: int = 6) -> trimesh.Trimesh:
+    """Deja el interior siempre por debajo de la superficie, sin llegar a tocarla.
+
+    Este es el remedio contra las **membranas de espesor cero**. Donde el modelo
+    es mas fino que dos paredes, la superficie desplazada sale por el otro lado
+    y la resta deja dos caras pegadas, una encima de otra, sin nada de material
+    entre ellas. Esa pieza ya no es un solido: el laminador la rechaza, el
+    volumen no se puede medir y en la vista previa se ve rota.
+
+    La guarda es la misma superficie metida hacia dentro una pizca -decimas de
+    milimetro, un desplazamiento tan corto que no puede cruzarse consigo mismo-.
+    Al quedarse el interior con lo que cabe dentro de ella, en los sitios finos
+    la pared se queda en esas decimas de milimetro en vez de en cero: fina, pero
+    pieza cerrada y imprimible.
+    """
+    guarda = _desplazar(mesh, max(0.2, float(wall) * 0.1), intentos)
+    if guarda is None or not len(guarda.faces):
+        return interior
+    recortado = boolean_op("intersection", interior, guarda)
+    if recortado is None or not len(recortado.faces):
+        return interior
+    return recortado
+
+
 def savings(original: float, hueco: float) -> str:
-    """Texto con el material que se ahorra al vaciar."""
+    """Texto con el material que se ahorra al vaciar.
+
+    Nunca dice "100 %": vaciar deja piel, y una piel pesa. Si el redondeo se
+    acerca tanto es que el numero esta mal medido, y anunciar un ahorro total
+    es justo la clase de mentira que hace desconfiar del resto del informe.
+    """
     if original <= 0:
         return ""
     ahorro = max(0.0, 1.0 - hueco / original)
-    return f"{ahorro * 100:.0f} % menos de material ({hueco / 1000:.0f} cm3 en vez de {original / 1000:.0f})"
+    texto = (f"mas del 99 % menos" if ahorro >= 0.995
+             else f"{ahorro * 100:.0f} % menos")
+    return f"{texto} de material ({hueco / 1000:.0f} cm3 en vez de {original / 1000:.0f})"
 
 
 def add_label_tab(ring, hole, width: float, height: float,

@@ -189,30 +189,36 @@ def slice_model(mesh: trimesh.Trimesh,
     piel = False
     if cfg.hollow and cfg.mode == "chunks":
         report(0, 1, "Solidificando la piel")
-        hueca, aviso = hollow_mesh(work, cfg.wall)
+        hueca, aviso = hollow_mesh(work, cfg.wall,
+                                   report=lambda texto: report(0, 1, texto))
         if aviso is None and hueca is not work and not is_empty(hueca):
             work = hueca
             piel = True
         else:
+            # vaciar despues, trozo a trozo, no es una alternativa: cada trozo
+            # sale como una cajita cerrada con paredes en las caras de corte,
+            # que es justo lo que no se quiere. Antes de entregar eso se deja
+            # el modelo macizo y se dice claramente por que.
             warnings.append(
-                (aviso or "No se ha podido vaciar el modelo entero") +
-                " Se vacia trozo a trozo, que gasta algo mas de material."
+                (aviso or "No se ha podido vaciar este modelo.") +
+                " Las piezas salen macizas. Prueba a bajar el espesor de piel, "
+                "a reparar la malla antes de cortarla o a usar el modo laminas, "
+                "que vacia por secciones y nunca falla."
             )
 
     if cfg.mode == "slabs" and cfg.slab_style == "prism":
         raw = _build_prisms(work, plan, cfg, report)
     else:
-        raw = _build_chunks(work, plan, cfg, report)
+        # una piel no se puede cortar con el recorte rapido por planos: al tapar
+        # la cara de corte hay que coser un anillo, y en una cascara de escaneo
+        # ese tapado deja agujeros. Un trozo con agujeros ya no es un solido: no
+        # se puede medir, el laminador lo rechaza y en la vista previa se ve
+        # roto. Con CSG cuesta un poco mas y sale cerrado siempre.
+        raw = _build_chunks(work, plan, cfg, report,
+                            engine="boolean" if piel else None)
 
     if cfg.hollow and cfg.mode == "slabs" and cfg.slab_style == "solid":
         raw = _hollow_slabs(raw, plan, cfg, report)
-    elif cfg.hollow and cfg.mode == "chunks" and not piel:
-        raw, fallos = _hollow_chunks(raw, cfg, report)
-        if fallos:
-            warnings.append(
-                f"{fallos} trozo(s) no se han podido vaciar y quedan macizos; "
-                "el resto si. Suele pasar en zonas con recovecos muy cerrados."
-            )
 
     pieces: List[Piece] = []
     descartadas: List[float] = []
@@ -263,7 +269,7 @@ def slice_model(mesh: trimesh.Trimesh,
         report(0, len(pieces), "Marcando piezas")
         _apply_labels(pieces, plan, cfg, report)
 
-    volumen_real = float(sum(p.mesh.volume for p in pieces if p.mesh.is_volume))
+    volumen_real = float(sum(_volumen_pieza(p.mesh, cfg) for p in pieces))
     result = SliceResult(pieces=pieces, plan=plan, config=cfg,
                          source={"original": source_stats, "escalado": prepared_stats},
                          warnings=warnings, dowels=dowels,
@@ -288,7 +294,9 @@ def slice_model(mesh: trimesh.Trimesh,
 def _build_chunks(mesh: trimesh.Trimesh,
                   plan: CutPlan,
                   cfg: SliceConfig,
-                  report) -> List[Tuple[Tuple[int, int, int], trimesh.Trimesh, object]]:
+                  report,
+                  engine: Optional[str] = None
+                  ) -> List[Tuple[Tuple[int, int, int], trimesh.Trimesh, object]]:
     """Corta en trozos reales, eje por eje, reutilizando el resto de cada corte.
 
     Cortar primero en bandas y luego subdividirlas es mucho mas rapido que
@@ -297,18 +305,19 @@ def _build_chunks(mesh: trimesh.Trimesh,
     out = []
     done = 0
     total = plan.total_cells
-    bands_x = _split_axis(mesh, plan, 0, cfg)
+    engine = engine or cfg.engine
+    bands_x = _split_axis(mesh, plan, 0, cfg, engine)
     for i, band_x in bands_x:
         if band_x is None:
             done += plan.counts[1] * plan.counts[2]
             report(done, total, "Cortando")
             continue
-        for j, band_y in _split_axis(band_x, plan, 1, cfg):
+        for j, band_y in _split_axis(band_x, plan, 1, cfg, engine):
             if band_y is None:
                 done += plan.counts[2]
                 report(done, total, "Cortando")
                 continue
-            for k, cell in _split_axis(band_y, plan, 2, cfg):
+            for k, cell in _split_axis(band_y, plan, 2, cfg, engine):
                 done += 1
                 if cell is not None:
                     out.append(((i, j, k), cell, None))
@@ -369,6 +378,31 @@ def _es_util(malla: trimesh.Trimesh, cfg: SliceConfig) -> bool:
     if minimo <= 0:
         return True
     return medidas[1] >= minimo
+
+
+def _volumen_pieza(malla: trimesh.Trimesh, cfg: SliceConfig) -> float:
+    """Material de una pieza, tambien cuando la malla no ha quedado cerrada.
+
+    Antes se sumaban solo las piezas cerradas y las demas contaban cero. Si el
+    corte dejaba muchas abiertas, el programa anunciaba tan tranquilo un
+    "100 % menos de material" sobre un modelo que en realidad seguia entero.
+    Un numero que no se puede medir no se inventa ni se da por cero: se estima
+    por la superficie de la piel, que para una cascara de espesor conocido es
+    area / 2 x espesor.
+    """
+    try:
+        volumen = float(malla.volume)
+    except Exception:
+        volumen = float("nan")
+    if malla.is_volume and np.isfinite(volumen) and volumen > 0:
+        return volumen
+    try:
+        area = float(malla.area)
+    except Exception:
+        area = 0.0
+    if cfg.hollow and cfg.wall > 0 and area > 0:
+        return area * 0.5 * float(cfg.wall)
+    return abs(volumen) if np.isfinite(volumen) else 0.0
 
 
 def _separar_islas(base: str,
@@ -436,28 +470,6 @@ def _recortar_contorno(outline, trozo: trimesh.Trimesh):
     return merge_polygons(dentro)
 
 
-def _hollow_chunks(raw, cfg: SliceConfig, report):
-    """Solidifica cada trozo por separado: deja la piel y vacia el interior.
-
-    Hacerlo trozo a trozo, y no sobre el modelo entero, es mucho mas robusto:
-    cada malla es pequena, el desplazamiento de la superficie se porta bien y,
-    si alguna falla, solo esa queda maciza en vez de arruinar todo el trabajo.
-    """
-    salida = []
-    fallos = 0
-    total = len(raw)
-    for i, (index, malla, outline) in enumerate(raw, start=1):
-        report(i, total, "Solidificando la piel")
-        if malla is None:
-            salida.append((index, malla, outline))
-            continue
-        hueca, aviso = hollow_mesh(malla, cfg.wall)
-        if aviso is not None and hueca is malla:
-            fallos += 1
-        salida.append((index, hueca, outline))
-    return salida, fallos
-
-
 def _hollow_slabs(raw, plan: CutPlan, cfg: SliceConfig, report):
     """Deja hueca cada rebanada solida, conservando su relieve exterior."""
     axis = plan.layer_axis
@@ -491,8 +503,10 @@ def _es_tapa(indice_capa: int, total_capas: int, cfg: SliceConfig) -> bool:
 def _split_axis(mesh: Optional[trimesh.Trimesh],
                 plan: CutPlan,
                 axis: int,
-                cfg: SliceConfig):
+                cfg: SliceConfig,
+                engine: Optional[str] = None):
     """Trocea una malla a lo largo de un eje devolviendo (indice, trozo)."""
+    engine = engine or cfg.engine
     count = plan.counts[axis]
     if mesh is None:
         return [(i, None) for i in range(count)]
@@ -511,12 +525,12 @@ def _split_axis(mesh: Optional[trimesh.Trimesh],
             continue
         if i == count - 1:
             # el resto ya esta cortado por abajo; solo hay que aplicar el kerf
-            piece = clip_slab(rest, axis, lo, hi, cfg.engine) if half > 0 else rest
+            piece = clip_slab(rest, axis, lo, hi, engine) if half > 0 else rest
             out.append((i, piece))
             break
-        piece = clip_slab(rest, axis, lo, hi, cfg.engine)
+        piece = clip_slab(rest, axis, lo, hi, engine)
         out.append((i, piece))
-        rest = clip_slab(rest, axis, edges[i + 1], float(plan.bounds[1][axis]) + 1.0, cfg.engine)
+        rest = clip_slab(rest, axis, edges[i + 1], float(plan.bounds[1][axis]) + 1.0, engine)
     while len(out) < count:
         out.append((len(out), None))
     return out

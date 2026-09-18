@@ -88,12 +88,33 @@ def clip_to_box(mesh: trimesh.Trimesh,
         return result
     # el corte por planos es rapido pero puede dejar caras abiertas en mallas
     # con auto-intersecciones: en ese caso repetimos el recorte con CSG
-    broken = result is not None and mesh.is_watertight and not result.is_watertight
+    broken = result is not None and sin_bordes(mesh) and not sin_bordes(result)
     if result is None or is_empty(result) or broken:
         fallback = _clip_boolean(mesh, lo, hi)
         if fallback is not None:
             return fallback
     return result
+
+
+def sin_bordes(mesh: trimesh.Trimesh) -> bool:
+    """True si la malla no tiene agujeros, aunque no sea perfecta.
+
+    `is_watertight` es mas estricto de lo que hace falta aqui: basta una
+    membrana de espesor cero -dos caras que se tocan, cosa normal en una piel
+    vaciada de un escaneo- para que diga que no. Cuando eso pasaba, el recorte
+    rapido por planos se daba por bueno aunque hubiera dejado la pieza abierta,
+    y de ahi salian los trozos rotos. Lo que hay que mirar para decidir si se
+    repite el corte con CSG es solo si quedan bordes sueltos.
+    """
+    try:
+        if mesh.is_watertight:
+            return True
+        aristas = mesh.edges_sorted
+        if len(aristas) == 0:
+            return False
+        return len(trimesh.grouping.group_rows(aristas, require_count=1)) == 0
+    except Exception:
+        return False
 
 
 def _clip_slice(mesh: trimesh.Trimesh,

@@ -438,3 +438,178 @@ def test_no_se_entrega_una_piel_hecha_migajas():
     from cortador.hollow import hollow_mesh
     piel, aviso = hollow_mesh(modelo, 5.0)
     assert aviso is None and _es_piel(piel, modelo) is True
+
+
+# ------------------------------------------- la piel entera no se estropea
+def _cascara_de_prueba(radio=60.0, pared=5.0, subdivisiones=3):
+    """Una piel de verdad: esfera menos esfera, hecha con el motor booleano."""
+    import trimesh
+    fuera = trimesh.creation.icosphere(subdivisions=subdivisiones, radius=radio)
+    dentro = trimesh.creation.icosphere(subdivisions=subdivisiones,
+                                        radius=radio - pared)
+    return trimesh.boolean.difference([fuera, dentro])
+
+
+def test_soldar_no_sustituye_una_piel_que_ya_estaba_bien():
+    """El error que dejaba el lobo hecho migajas.
+
+    El motor booleano entrega la piel cerrada. Soldar vertices encima solo vale
+    para *mirar* como la vera el laminador: donde el modelo es mas fino que la
+    pared las dos caras se funden y aparecen aristas con cuatro triangulos, y
+    entonces la malla soldada ya no es estanca. Si se devolvia esa, el corte
+    posterior dejaba los trozos abiertos, el volumen se contaba como cero y el
+    programa anunciaba "100 % menos de material" sobre un modelo intacto.
+    """
+    from cortador.hollow import _cascara_limpia
+
+    piel = _cascara_de_prueba()
+    assert piel.is_watertight
+    salida = _cascara_limpia(piel)
+    assert salida.is_watertight
+    assert len(salida.faces) == len(piel.faces)
+
+
+def test_una_piel_finisima_de_un_modelo_enorme_no_se_rechaza():
+    """En una figura de dos metros la piel es menos del 0,5 % del bloque.
+
+    Con el limite fijo de antes esa piel -perfectamente buena- se daba por
+    migajas y el vaciado se descartaba entero.
+    """
+    import trimesh
+    from cortador.hollow import _es_piel
+
+    modelo = trimesh.creation.box(extents=[1900.0, 700.0, 1900.0])
+    piel = trimesh.boolean.difference(
+        [modelo, trimesh.creation.box(extents=[1898.0, 698.0, 1898.0])])
+
+    assert piel.volume / modelo.volume < 0.005          # menos del limite viejo
+    assert _es_piel(piel, modelo, 1.0) is True
+    # y unas migajas siguen sin colar
+    assert _es_piel(trimesh.creation.box(extents=[2.0, 2.0, 2.0]),
+                    modelo, 1.0) is False
+
+
+def test_el_ahorro_nunca_dice_el_cien_por_cien():
+    from cortador.hollow import savings
+
+    assert "100 %" not in savings(1000.0, 0.5)
+    assert "99 %" in savings(1000.0, 0.5)
+
+
+# -------------------------------------------------- vaciado por capas
+def test_el_vaciado_por_capas_da_una_piel_cerrada():
+    """La herramienta de reserva: encoger secciones no puede cruzarse nunca."""
+    import trimesh
+    from cortador.hollow import _es_piel, _piel_por_capas
+
+    modelo = trimesh.creation.icosphere(subdivisions=4, radius=80.0)
+    piel = _piel_por_capas(modelo, 6.0)
+
+    assert piel is not None
+    assert piel.is_watertight
+    assert _es_piel(piel, modelo, 6.0) is True
+    # la piel mide aproximadamente superficie x espesor
+    esperado = modelo.area * 6.0
+    assert 0.5 * esperado < piel.volume < 1.9 * esperado
+
+
+def test_el_vaciado_por_capas_deja_tapa_arriba_y_abajo():
+    """El hueco no puede salir por el techo: en Z tambien hay pared."""
+    import numpy as np
+    import trimesh
+    from cortador.hollow import _piel_por_capas
+
+    cilindro = trimesh.creation.cylinder(radius=40.0, height=120.0, sections=64)
+    piel = _piel_por_capas(cilindro, 5.0)
+
+    assert piel is not None and piel.is_watertight
+    # el eje del cilindro sigue lleno de material en los extremos
+    rayos = piel.ray.intersects_location(
+        ray_origins=np.array([[0.0, 0.0, 200.0]]),
+        ray_directions=np.array([[0.0, 0.0, -1.0]]))[0]
+    alturas = sorted(float(p[2]) for p in rayos)
+    assert len(alturas) >= 4                    # techo, camara, suelo
+    assert alturas[-1] - alturas[-2] >= 4.0     # tapa de arriba, unos 5 mm
+
+
+def test_una_piel_rota_por_picos_se_rehace_por_capas():
+    """Si el desplazamiento falla, se entrega piel igual: nunca migajas."""
+    import trimesh
+    from cortador.hollow import hollow_mesh
+
+    modelo = _peluda(subdivisiones=5, amplitud=8.0, frecuencia=4.0, radio=120.0)
+    piel, aviso = hollow_mesh(modelo, 5.0)
+
+    assert aviso is None
+    assert piel is not modelo
+    assert piel.area > modelo.area * 1.2
+    assert 0.0 < piel.volume < modelo.volume * 0.9
+
+
+# ---------------------------------------------- el informe no puede mentir
+def test_el_material_de_una_pieza_abierta_no_cuenta_cero():
+    """Una pieza que no queda cerrada tiene material aunque no se pueda medir."""
+    import trimesh
+    from cortador.config import SliceConfig
+    from cortador.slicer import _volumen_pieza
+
+    cfg = SliceConfig(hollow=True, wall=3.0)
+    tapa = trimesh.Trimesh(vertices=[[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]],
+                           faces=[[0, 1, 2], [0, 2, 3]])
+    assert not tapa.is_volume
+    # 100 mm2 de piel de 3 mm: unos 150 mm3, no cero
+    assert _volumen_pieza(tapa, cfg) == 150.0
+
+    cubo = trimesh.creation.box(extents=[10.0, 10.0, 10.0])
+    assert abs(_volumen_pieza(cubo, cfg) - 1000.0) < 1e-6
+
+
+def test_el_ahorro_que_se_anuncia_es_el_de_las_piezas():
+    """El numero del informe tiene que salir de lo que se va a imprimir."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.hollow import hollow_mesh
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150.0)
+    cfg = SliceConfig(printer=PrinterSpec(110, 110, 110), hollow=True, wall=4.0,
+                      labels=LabelOptions(enabled=False))
+    res = slice_model(esfera, cfg)
+
+    piel, aviso = hollow_mesh(esfera, 4.0)
+    assert aviso is None
+    # el material contado no puede desplomarse a casi nada
+    assert res.hollow_volume > piel.volume * 0.6
+    assert res.hollow_volume < piel.volume * 1.4
+    assert all("100 %" not in a for a in res.warnings)
+
+
+def test_las_piezas_de_un_modelo_vaciado_salen_cerradas():
+    """Cortar una piel con el recorte rapido dejaba trozos abiertos."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150.0)
+    res = slice_model(esfera, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                          hollow=True, wall=4.0,
+                                          labels=LabelOptions(enabled=False)))
+    abiertas = [p.name for p in res.pieces if not p.mesh.is_volume]
+    assert not abiertas, abiertas
+
+
+def test_si_no_se_puede_vaciar_las_piezas_quedan_macizas_y_se_dice():
+    """Nunca se vacia trozo a trozo: eso llenaba el centro de cajas huecas."""
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    # una plancha de 5 mm con 4 mm de piel: no hay hueco posible
+    plancha = trimesh.creation.box(extents=[200.0, 200.0, 5.0])
+
+    res = slice_model(plancha, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                           hollow=True, wall=4.0,
+                                           labels=LabelOptions(enabled=False)))
+    assert any("macizas" in a for a in res.warnings), res.warnings
+    for pieza in res.pieces:
+        assert pieza.mesh.is_volume

@@ -286,14 +286,46 @@ los trozos del centro salen como cubos huecos que no tocan la superficie, y se
 gasta el doble de material. En Brumo a 1,80 m: **23 litros haciendolo bien,
 57,8 haciendolo al reves**.
 
-### Como lo hace
+### Como lo hace: dos herramientas, nunca migajas
 
-Cada trozo se solidifica **por separado**, despues de cortarlo. Asi la malla de
-trabajo siempre es pequena, el desplazamiento de la superficie se porta bien y,
-si un trozo con recovecos muy cerrados no admite el vaciado, solo ese queda
-macizo (te lo dice) en vez de arruinar el trabajo entero. En el gorila de 1,80 m
-fallan 7 de 305. Si un trozo no admite todo el espesor pedido, se prueba con
-algo menos antes de rendirse.
+Vaciar una malla de un escaneo es el paso delicado de todo esto, asi que
+Cortador lo intenta con dos herramientas distintas y comprueba el resultado
+antes de darlo por bueno.
+
+**1. Desplazamiento de la superficie** (el *Solidify* de Blender). Se empuja
+cada vertice hacia dentro a lo largo de su normal y se resta ese solido del
+modelo. Es rapido y deja la cara interior lisa. Sobre la copia lisa: el interior
+se calcula sobre una version suavizada de la malla, porque desplazar tal cual un
+escaneo con grano hace que cada rugosidad se cruce con sus vecinas.
+
+**2. Vaciado por capas**, si lo anterior no entrega una piel cerrada. Se corta el
+modelo en secciones horizontales, se encoge cada seccion el espesor de la pared
+-el mismo encogido exacto del modo laminas- y se apila lo que queda. Encoger un
+contorno plano es una operacion 2D: no puede cruzarse ni darse la vuelta, y donde
+la pieza es mas fina que la pared el contorno simplemente desaparece y ahi el
+modelo queda macizo, que es lo correcto. La cara interior sale escalonada en vez
+de lisa; como no se ve ni se imprime, es un cambio barato a cambio de no fallar.
+
+Si un trozo no admite todo el espesor pedido se prueba con algo menos antes de
+rendirse, y si nada funciona **las piezas salen macizas y se dice por que**:
+nunca se entregan esquirlas.
+
+### La pared nunca llega a cero
+
+Donde el modelo es mas fino que dos paredes, la superficie desplazada sale por el
+otro lado y la resta dejaria dos caras pegadas sin nada de material entre ellas.
+Esa pieza ya no es un solido: no se puede medir, el laminador la rechaza y en la
+vista previa se ve rota. Para evitarlo, el interior se recorta contra una
+**guarda**: la misma superficie metida hacia dentro unas decimas de milimetro, un
+avance tan corto que no puede cruzarse consigo mismo. En los sitios finos la
+pared se queda en esas decimas en vez de en cero: fina, pero pieza cerrada.
+
+### Cortar una piel se hace con CSG
+
+Una cascara no se puede partir con el recorte rapido por planos: al tapar la cara
+de corte hay que coser un anillo, y en una piel de escaneo ese tapado deja
+agujeros. Por eso, cuando el modelo va vaciado, el corte se hace con el motor
+booleano aunque cueste un poco mas: los trozos salen cerrados siempre.
 
 - Donde el modelo es mas fino que dos veces el espesor, la pieza se queda maciza
   sola: nunca salen piezas de aire.
@@ -512,9 +544,11 @@ export_result(resultado, "salida/", mesh_format="stl")
 - El corte es siempre **ortogonal**: no hay cortes en diagonal ni por superficies curvas.
 - No reorienta las piezas para optimizar la impresion.
 - Los modelos con auto-intersecciones muy severas pueden necesitar 3D Builder.
-- El solidificado usa un desplazamiento de la superficie (como el Solidify de
-  Blender): en trozos con recovecos muy cerrados puede no salir y ese trozo queda
-  macizo (se avisa). En el gorila de 1,80 m fallan 11 de 308.
+- El solidificado prueba primero un desplazamiento de la superficie (como el
+  Solidify de Blender) y, si no sale, el vaciado por capas. Si ninguno sale, las
+  piezas quedan macizas y se avisa; nunca se entregan esquirlas.
+- El vaciado por capas deja la cara interior escalonada (no se ve) y en un modelo
+  de dos metros tarda unos minutos.
 - El interior de cada trozo queda como una camara cerrada. Para FDM es justo lo
   que se quiere; para resina habria que anadir agujeros de drenaje a mano.
 - En mallas reconstruidas o escaneadas puede haber superficies que se tocan: las
