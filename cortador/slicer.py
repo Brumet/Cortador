@@ -238,9 +238,18 @@ def slice_model(mesh: trimesh.Trimesh,
             by_index.setdefault(index, []).append(piece)
 
     if descartadas:
+        perdido = sum(descartadas) / 1000.0            # cm3
+        del_total = (perdido * 1000.0 / volumen_macizo * 100.0
+                     if volumen_macizo > 0 else 0.0)
         warnings.append(
             f"Se han descartado {len(descartadas)} trozos sueltos de menos de "
-            f"{cfg.min_piece:g} mm: son esquirlas que no se pueden fabricar."
+            f"{cfg.min_piece:g} mm: son esquirlas que no se pueden fabricar. "
+            f"Entre todas suman {perdido:.1f} cm3, el {del_total:.2f} % del "
+            f"modelo, asi que no falta nada que se note."
+            if del_total < 1.0 else
+            f"Se han descartado {len(descartadas)} trozos sueltos de menos de "
+            f"{cfg.min_piece:g} mm ({perdido:.0f} cm3, el {del_total:.1f} % del "
+            f"modelo). Si es mucho, baja el tamano minimo de pieza."
         )
 
     _link_neighbors(pieces, by_index, plan)
@@ -389,7 +398,8 @@ def _separar_islas(base: str,
         if _es_util(trozo, cfg):
             utiles.append(trozo)
         elif descartadas is not None:
-            descartadas.append(float(np.max(trozo.extents)))
+            volumen = float(trozo.volume) if trozo.is_volume else 0.0
+            descartadas.append(volumen)
     trozos = utiles
     if not trozos:
         return []

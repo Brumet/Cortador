@@ -373,3 +373,68 @@ def test_la_pared_se_afina_donde_no_cabe():
     assert interior is not None
     # sin limitar, el interior daria la vuelta y seria mas grande que el original
     assert interior.extents[0] <= cuna.extents[0] + 1e-6
+
+
+# ------------------------------------------------- mallas de escaneo rugosas
+def _peluda(subdivisiones=6, amplitud=4.0, frecuencia=2.2, radio=250.0, semilla=5):
+    """Una esfera con grano fino, como un escaneo con pelo o textura."""
+    import numpy as np
+    import trimesh
+
+    rs = np.random.RandomState(semilla)
+    m = trimesh.creation.icosphere(subdivisions=subdivisiones, radius=radio)
+    v = m.vertices.copy()
+    n = m.vertex_normals
+    pelo = (np.sin(v[:, 0] * frecuencia) * np.cos(v[:, 1] * frecuencia)
+            * np.sin(v[:, 2] * frecuencia))
+    m.vertices = v + n * (pelo[:, None] * amplitud
+                          + rs.normal(0, amplitud * 0.375, (len(v), 1)))
+    m.merge_vertices()
+    return m
+
+
+def test_la_cara_interior_queda_lisa():
+    """Por dentro se ve liso, no con las puas del escaneo.
+
+    Es lo que Brumet vio en su lobo: la pared interior salia mas rugosa que la
+    superficie del modelo, porque se desplazaba la malla tal cual y cada
+    rugosidad se cruzaba con sus vecinas.
+    """
+    from cortador.hollow import _rugosidad, _superficie_interior
+
+    modelo = _peluda()
+    interior = _superficie_interior(modelo, 5.0)
+
+    assert interior is not None
+    assert _rugosidad(interior) < _rugosidad(modelo) * 0.5
+
+
+def test_una_malla_rugosa_y_densa_se_vacia_de_verdad():
+    """Con un escaneo, el vaciado tiene que dar piel, no migajas."""
+    from cortador.hollow import hollow_mesh
+
+    modelo = _peluda(subdivisiones=6, amplitud=6.0, frecuencia=3.0)
+    hueca, aviso = hollow_mesh(modelo, 5.0)
+
+    assert aviso is None
+    assert hueca is not modelo
+    # una piel conserva la cara de fuera y anade la de dentro
+    assert hueca.area > modelo.area * 1.2
+    # y ahorra material de verdad, sin quedarse en nada
+    assert 0.02 < hueca.volume / modelo.volume < 0.6
+
+
+def test_no_se_entrega_una_piel_hecha_migajas():
+    """Antes se devolvian esquirlas diciendo '100 % menos de material'."""
+    import trimesh
+
+    from cortador.hollow import _es_piel
+
+    modelo = trimesh.creation.icosphere(subdivisions=3, radius=100.0)
+    migajas = trimesh.creation.box(extents=[2.0, 2.0, 2.0])
+
+    assert _es_piel(migajas, modelo) is False
+    # una piel de verdad si pasa
+    from cortador.hollow import hollow_mesh
+    piel, aviso = hollow_mesh(modelo, 5.0)
+    assert aviso is None and _es_piel(piel, modelo) is True

@@ -164,8 +164,7 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         if cascara is None:
             continue
         cascara = _soldar(cascara)
-        proporcion = float(cascara.volume) / float(mesh.volume)
-        if not (0.005 < proporcion < 0.995):
+        if not _es_piel(cascara, mesh):
             continue
         if cascara.is_watertight:
             return cascara, None
@@ -175,6 +174,26 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         return reserva, None
     return mesh, ("Este trozo no admite el vaciado (recovecos muy cerrados o "
                   "paredes mas finas que el espesor): se deja macizo.")
+
+
+def _es_piel(cascara: trimesh.Trimesh, original: trimesh.Trimesh) -> bool:
+    """Comprueba que lo que salio del vaciado es una piel y no migajas.
+
+    La comprobacion util no es el volumen sino la **superficie**: una piel bien
+    hecha conserva entera la cara de fuera y ademas anade la de dentro, asi que
+    su area casi dobla la del modelo. Si el desplazamiento se cruzo consigo
+    mismo y la resta se comio el modelo, el area se desploma; eso es lo que
+    hay que rechazar, en vez de entregar un monton de esquirlas y decir que se
+    ahorro el 100 % del material.
+    """
+    if cascara is None or cascara.is_empty or not len(cascara.faces):
+        return False
+    if original.area <= 0 or original.volume <= 0:
+        return False
+    if cascara.area < original.area * 1.05:
+        return False
+    proporcion = float(cascara.volume) / float(original.volume)
+    return 0.005 < proporcion < 0.995
 
 
 def _soldar(malla: trimesh.Trimesh) -> trimesh.Trimesh:
@@ -225,6 +244,96 @@ def hollow_region(region, wall: float, tab_size=None, minimo: float = 5.0):
     return unary_union(partes)
 
 
+#: por encima de esto, la cara interior se calcula sobre una copia aligerada:
+#: no se ve, y con millones de caras el desplazamiento se cruza consigo mismo
+CARAS_INTERIOR = 120_000
+
+#: a partir de aqui se considera que la malla tiene detalle fino de escaneo;
+#: por debajo, lo que parece rugosidad son las aristas propias de la pieza
+CARAS_DENSAS = 20_000
+
+
+def _base_interior(mesh: trimesh.Trimesh, wall: float) -> trimesh.Trimesh:
+    """Copia de la malla lista para desplazarla hacia dentro.
+
+    La cara de dentro no se ve nunca, pero es la que decide si la pared sale
+    entera o hecha puas. En un escaneo con pelo o con grano fino, desplazar la
+    superficie tal cual hace que los vertices de cada rugosidad se crucen entre
+    si y la pieza acaba en migajas.
+
+    Por eso aqui se trabaja sobre una copia **aligerada y suavizada**: pierde el
+    detalle mas fino que la propia pared, que es justo el que no cabe dentro, y
+    deja el interior liso. El exterior no se toca: se exporta con todos sus
+    triangulos originales.
+    """
+    base = mesh.copy()
+    if len(mesh.faces) > CARAS_INTERIOR:
+        try:
+            aligerada = mesh.simplify_quadric_decimation(face_count=CARAS_INTERIOR)
+            # aligerar abre la malla con mucha frecuencia, y una cara interior
+            # abierta no sirve: el corte booleano la rechaza y el modelo se
+            # queda macizo sin que nadie sepa por que
+            aligerada = _cerrar(aligerada)
+            if aligerada is not None and aligerada.is_watertight:
+                base = aligerada
+        except Exception:
+            pass
+
+    # Suavizado Taubin: quita el grano sin encoger el modelo (a diferencia del
+    # laplaciano normal, que lo va desinflando en cada pasada). Solo tiene
+    # sentido en mallas densas: en una pieza de pocas caras, lo que parece
+    # rugosidad son sus aristas de verdad y suavizarlas seria estropearla.
+    rugosidad = _rugosidad(base) if len(base.faces) > CARAS_DENSAS else 0.0
+    if rugosidad > wall * 0.15:
+        pasadas = int(min(24, max(4, round(rugosidad / max(wall, 0.1) * 12))))
+        try:
+            trimesh.smoothing.filter_taubin(base, lamb=0.53, nu=-0.53,
+                                            iterations=pasadas)
+        except Exception:
+            pass
+    return base
+
+
+def _cerrar(malla: trimesh.Trimesh) -> Optional[trimesh.Trimesh]:
+    """Intenta dejar cerrada una malla recien aligerada."""
+    try:
+        limpia = malla.copy()
+        limpia.merge_vertices()
+        limpia.update_faces(limpia.nondegenerate_faces())
+        limpia.update_faces(limpia.unique_faces())
+        limpia.remove_unreferenced_vertices()
+        if not limpia.is_watertight:
+            limpia.fill_holes()
+            limpia.fix_normals()
+        return limpia
+    except Exception:
+        return None
+
+
+def _rugosidad(mesh: trimesh.Trimesh) -> float:
+    """Cuanto se aparta la superficie de su propia media, en mm.
+
+    Sirve para decidir cuanto suavizar: una superficie lisa no necesita nada y
+    un escaneo con pelo necesita bastante.
+    """
+    try:
+        aristas = mesh.edges_unique_length
+        if len(aristas) == 0:
+            return 0.0
+        vecinos = mesh.vertex_neighbors
+        v = np.asarray(mesh.vertices, dtype=float)
+        muestra = np.linspace(0, len(v) - 1, min(len(v), 4000)).astype(int)
+        desvios = []
+        for i in muestra:
+            vec = vecinos[i]
+            if len(vec) < 3:
+                continue
+            desvios.append(np.linalg.norm(v[i] - v[vec].mean(axis=0)))
+        return float(np.mean(desvios)) if desvios else 0.0
+    except Exception:
+        return 0.0
+
+
 def _superficie_interior(mesh: trimesh.Trimesh,
                         wall: float,
                         intentos: int = 6) -> Optional[trimesh.Trimesh]:
@@ -235,7 +344,17 @@ def _superficie_interior(mesh: trimesh.Trimesh,
     puas que atraviesan la pared. Aqui se detectan las caras que se dan la
     vuelta al desplazarlas y se reduce el avance **solo** en sus vertices: la
     pared queda algo mas fina en esos puntos, que es justo lo que hace falta.
+
+    El desplazamiento se hace sobre la copia suavizada (`_base_interior`), no
+    sobre la malla original: asi el interior queda liso aunque el modelo sea un
+    escaneo lleno de grano.
     """
+    rugosidad = _rugosidad(mesh) if len(mesh.faces) > CARAS_DENSAS else 0.0
+    mesh = _base_interior(mesh, wall)
+    # La copia suavizada pasa por la media de la superficie, asi que en los
+    # valles la pared se quedaria corta justo esa rugosidad. Se compensa
+    # hundiendo un poco mas la cara interior: mejor 1 mm de mas que un agujero.
+    wall = float(wall) + min(rugosidad, float(wall))
     try:
         normales = np.asarray(mesh.vertex_normals, dtype=float)
     except Exception:
