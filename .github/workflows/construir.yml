@@ -158,10 +158,26 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Comprobar que la actualizacion automatica puede funcionar
+        shell: bash
+        run: |
+          set -e
+          # electron-updater busca latest.yml en la Release: sin ese archivo,
+          # la app instalada nunca se entera de que hay version nueva
+          test -f escritorio/dist/latest.yml || {
+            echo "::error::falta latest.yml: la app no podria actualizarse sola"
+            ls -la escritorio/dist
+            exit 1
+          }
+          cat escritorio/dist/latest.yml
+
       - uses: actions/upload-artifact@v4
         with:
           name: Cortador-Setup
-          path: escritorio/dist/Cortador-Setup.exe
+          path: |
+            escritorio/dist/Cortador-Setup.exe
+            escritorio/dist/Cortador-Setup.exe.blockmap
+            escritorio/dist/latest.yml
           retention-days: 90
 
   publicar:

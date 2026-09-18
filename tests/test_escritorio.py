@@ -79,3 +79,38 @@ def test_la_pantalla_de_espera_lleva_el_logo_completo():
     assert "brumet-blanco.svg" in espera
     assert 'class="hilo"' in espera and "@keyframes corta" in espera
     assert os.path.exists(os.path.join(APP, "assets", "brumet-blanco.svg"))
+
+
+def test_la_app_se_actualiza_sola():
+    """Descargar una version nueva no puede obligar a reinstalar a mano."""
+    datos = _package()
+    assert "electron-updater" in datos.get("dependencies", {})
+
+    publicacion = datos["build"]["publish"]
+    assert publicacion, "sin publish, electron-updater no sabe donde mirar"
+    destino = publicacion[0] if isinstance(publicacion, list) else publicacion
+    assert destino["provider"] == "github"
+    assert destino["repo"] == "Cortador"
+
+    # instalacion de un clic: la actualizacion entra sin asistente
+    nsis = datos["build"]["nsis"]
+    assert nsis["oneClick"] is True
+    assert nsis["perMachine"] is False
+
+    with open(os.path.join(APP, "main.js"), encoding="utf-8") as fh:
+        main_js = fh.read()
+    assert "electron-updater" in main_js
+    assert "autoInstallOnAppQuit = true" in main_js
+    assert "update-downloaded" in main_js
+    assert "quitAndInstall" in main_js
+    # y no se busca actualizacion antes de que la app este viva
+    assert main_js.index("prepararActualizador()") > main_js.index("motor listo")
+
+
+def test_la_compilacion_publica_el_archivo_que_avisa_de_la_version():
+    """Sin latest.yml en la Release, la app instalada nunca se entera."""
+    flujo = os.path.join(RAIZ, ".github", "workflows", "construir.yml")
+    with open(flujo, encoding="utf-8") as fh:
+        texto = fh.read()
+    assert "escritorio/dist/latest.yml" in texto
+    assert "la app no podria actualizarse sola" in texto

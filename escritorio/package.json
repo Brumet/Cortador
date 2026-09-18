@@ -13,19 +13,26 @@
   "build": {
     "appId": "com.brumet.cortador",
     "productName": "Cortador",
-    "publish": null,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Brumet",
+        "repo": "Cortador"
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
+      "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Cortador",
-      "artifactName": "Cortador-Setup.${ext}"
+      "artifactName": "Cortador-Setup.${ext}",
+      "deleteAppDataOnUninstall": false
     },
     "files": [
       "main.js",
@@ -45,5 +52,8 @@
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
   }
 }

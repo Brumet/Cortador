@@ -64,6 +64,12 @@ La ventana es de la propia aplicacion (Electron trae su navegador dentro), asi
 que no depende de WebView2, ni de Edge, ni de nada que tengas que instalar
 aparte. Es la misma base con la que esta hecho Brumet Slicer.
 
+**Se actualiza sola.** Cuando hay una version nueva, Cortador se la baja por
+detras y te pregunta si quieres reiniciar para instalarla; si dices que no, se
+instala al cerrar la app. No hay que volver a descargar nada a mano ni
+desinstalar la version anterior: se sobrescribe encima y los ajustes se quedan
+como estaban.
+
 Para quitarlo: *Configuracion → Aplicaciones → Cortador → Desinstalar*.
 
 **Si algo falla**, la ventana lo dice en pantalla, con el motivo y un boton

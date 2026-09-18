@@ -108,6 +108,69 @@ function lanzarMotor (puerto) {
   return proceso
 }
 
+/* ------------------------------------------------------------ actualizacion
+   La app se actualiza sola: mira si hay version nueva en las Releases, se la
+   baja por detras y la instala al cerrar. No hay que volver a descargar nada
+   a mano ni desinstalar la anterior: se sobrescribe encima.                */
+let actualizador = null
+
+function prepararActualizador () {
+  if (!app.isPackaged) return null          // en desarrollo no hay nada que actualizar
+  try {
+    const { autoUpdater } = require('electron-updater')
+    autoUpdater.autoDownload = true         // que se la baje sin preguntar
+    autoUpdater.autoInstallOnAppQuit = true // y se instale al cerrar
+    autoUpdater.logger = null
+
+    autoUpdater.on('checking-for-update', () => anotar('buscando actualizaciones'))
+    autoUpdater.on('update-not-available', () => anotar('la version instalada es la ultima'))
+    autoUpdater.on('update-available', (info) =>
+      anotar(`hay version nueva: ${info && info.version}; descargando`))
+    autoUpdater.on('download-progress', (p) => {
+      const pct = Math.round(p.percent || 0)
+      if (pct % 25 === 0) anotar(`descargando actualizacion: ${pct} %`)
+    })
+    autoUpdater.on('error', (e) => anotar('ERROR al actualizar: ' + (e && e.message)))
+    autoUpdater.on('update-downloaded', (info) => avisarActualizacion(info))
+    return autoUpdater
+  } catch (e) {
+    anotar('sin actualizador automatico: ' + e.message)
+    return null
+  }
+}
+
+function avisarActualizacion (info) {
+  const version = (info && info.version) || ''
+  anotar(`actualizacion ${version} lista para instalar`)
+  const opciones = {
+    type: 'info',
+    buttons: ['Reiniciar e instalar', 'Al cerrar la app'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Cortador',
+    message: `Cortador ${version} esta listo`,
+    detail: 'La nueva version ya esta descargada. Se instala encima de la que '
+          + 'tienes, sin desinstalar nada y sin perder tus ajustes.',
+  }
+  dialog.showMessageBox(ventana || null, opciones).then(({ response }) => {
+    if (response === 0) {
+      anotar('reiniciando para instalar la actualizacion')
+      try { if (motor && motor.exitCode === null) motor.kill() } catch (e) { /* ya estaba */ }
+      actualizador.quitAndInstall()
+    }
+  }).catch(() => { /* si el dialogo falla, se instala igual al cerrar */ })
+}
+
+function buscarActualizaciones () {
+  if (!actualizador) return
+  try {
+    actualizador.checkForUpdates()
+  } catch (e) {
+    anotar('no se pudo buscar actualizaciones: ' + e.message)
+  }
+}
+
+
 function esInterno (url) {
   return url.startsWith('file://') ||
          /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(url)
@@ -162,6 +225,12 @@ async function arrancar () {
 
   anotar('motor listo · cargando la interfaz')
   if (ventana && !ventana.isDestroyed()) ventana.loadURL(urlMotor)
+
+  // la actualizacion se busca despues, para no competir con el arranque
+  setTimeout(() => {
+    actualizador = prepararActualizador()
+    buscarActualizaciones()
+  }, 8000)
   if (process.env.CORTADOR_CAPTURA) capturar(process.env.CORTADOR_CAPTURA)
 }
 
@@ -192,6 +261,12 @@ function fallar (mensaje) {
 }
 
 ipcMain.handle('abrir-registro', () => shell.openPath(REGISTRO))
+ipcMain.handle('version', () => app.getVersion())
+ipcMain.handle('buscar-actualizacion', () => {
+  if (!actualizador) actualizador = prepararActualizador()
+  buscarActualizaciones()
+  return app.getVersion()
+})
 ipcMain.handle('reintentar', () => { arrancar() })
 
 app.whenReady().then(arrancar)

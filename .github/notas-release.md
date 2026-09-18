@@ -20,6 +20,10 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
+- **La app se actualiza sola.** A partir de esta version, cuando salga una
+  nueva Cortador se la baja solo y la instala encima, sin desinstalar nada.
+  Esta es la ultima que hay que instalar a mano.
+
 - **El vaciado ya sirve para escaneos.** Con mallas densas y rugosas (un escaneo
   con pelo, por ejemplo) la pared interior salia como un erizo de puas y el
   modelo se quedaba en migajas mientras la app decia "100 % menos de material".
