@@ -337,6 +337,46 @@ booleano aunque cueste un poco mas: los trozos salen cerrados siempre.
 - En un pico o un pliegue muy cerrado los vertices se cruzarian y apareceria una
   pua atravesando la pared: ahi se afina el espesor en vez de cruzarlos.
 
+### Por dentro liso, por fuera con todo el detalle
+
+La cara de fuera se exporta con **todos sus triangulos originales**: el pelo del
+lobo, los poros, los aranazos del escaneo, todo. La de dentro se calcula sobre
+una copia suavizada, asi que no copia esa textura. Medido en un escaneo con
+grano, con el quiebro entre triangulos vecinos como medida:
+
+| | quiebro medio | percentil 95 |
+|---|---|---|
+| una esfera perfecta (referencia) | 0,6 deg | 0,7 deg |
+| **cara exterior** (el modelo tal cual) | 28,3 deg | 80,4 deg |
+| **cara interior** | **4,4 deg** | 12,3 deg |
+
+Seis veces mas lisa que la superficie del modelo, y el 99,6 % de ella es
+superficie suavizada. Ese 0,4 % restante es donde el modelo es mas fino que dos
+paredes: ahi el interior sigue al modelo a proposito, porque si no habria
+agujero en vez de pared.
+
+Subir el suavizado no mejora: a partir de ahi la cara interior se hunde tanto
+que se cruza en los pliegues y hay que recortarla contra el modelo mas a menudo,
+asi que el grano **sube** (4,4 -> 5,5 -> 6,0 deg) y encima gasta mas material.
+El ajuste que trae es el punto bueno de esa curva.
+
+### Rendimiento: que se puede acelerar y que no
+
+- **Nucleos.** El corte reparte las bandas entre hilos. El trabajo caro es CSG en
+  C++, que suelta el interprete mientras calcula. Medido en un escaneo de 1,3 M
+  de triangulos con cuatro nucleos: **157 s -> 133 s**. Con
+  `CORTADOR_HILOS=1` se desactiva.
+- **Tarjeta grafica.** Se usa en la vista previa, que es 3D de verdad por WebGL.
+  El calculo (booleanos, secciones, vaciado) **no tiene version para GPU** en
+  ninguna libreria libre: es geometria exacta con numeros racionales, no algebra
+  lineal. Decir que va por GPU seria mentira.
+- **Memoria.** Donde mas se notaba era en la vista previa. Antes se aligeraba
+  cada pieza para que todo cupiera en 300.000 triangulos, y en una piel de 3 mm
+  eso funde las dos caras: el archivo estaba bien, pero **en pantalla se veia un
+  amasijo de picos**. Ahora el techo son 2,5 millones y, por debajo de el, una
+  pieza solo se aligera si el resultado sigue siendo la misma pieza (cerrada y
+  con el mismo volumen). Si no, se pinta entera.
+
 ### Rebanadas apiladas (otra cosa distinta)
 
 Aparte del corte en trozos, Cortador puede rebanar el modelo en **capas

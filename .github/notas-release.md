@@ -20,29 +20,36 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
-- **La app se actualiza sola.** A partir de esta version, cuando salga una
-  nueva Cortador se la baja solo y la instala encima, sin desinstalar nada.
-  Esta es la ultima que hay que instalar a mano.
+- **Se arregla el vaciado de escaneos grandes.** Un lobo de 1,9 M de triangulos
+  a 1,9 m salia en 220 piezas rotas, 0,3 L de material y un "100 % menos" que
+  era imposible. Eran cuatro fallos encadenados: soldar la piel la rompia,
+  cortar una cascara con el recorte rapido dejaba agujeros, el material se
+  contaba sumando solo las piezas cerradas (las demas valian cero) y el limite
+  para dar por buena una piel era un porcentaje fijo que una figura de dos
+  metros nunca alcanza. En el mismo modelo: **de 158 piezas abiertas a
+  ninguna**, y el material que se anuncia es el que se va a gastar.
 
-- **El vaciado ya sirve para escaneos.** Con mallas densas y rugosas (un escaneo
-  con pelo, por ejemplo) la pared interior salia como un erizo de puas y el
-  modelo se quedaba en migajas mientras la app decia "100 % menos de material".
-  Ahora la cara de dentro se calcula sobre una copia suavizada y **queda lisa**;
-  el exterior conserva todos sus triangulos. Y si el vaciado sale mal, se dice,
-  en vez de entregar esquirlas.
-- **Se arregla el corte hueco, que estaba al reves.** Antes se cortaba primero y
-  se vaciaba cada trozo despues, asi que cada pieza salia como una cajita
-  cerrada, con paredes en las caras de corte, y los trozos del centro eran cubos
-  huecos que no aportaban nada. Ahora se vacia el modelo entero y se corta esa
-  piel: cada pieza es un trozo de cascara. En Brumo a 1,80 m, **23 litros en vez
-  de 57,8**.
-- Perfiles de maquina (FLSUN V400, T1 y SR, Bambu A1 y A1 mini, genericas y dos
-  de resina), todos con margen de seguridad.
-- **Camas redondas**: en una delta cabe el cuadrado inscrito, no el diametro.
-- El **espesor de la piel sale de la boquilla**, siempre multiplo del ancho de linea.
-- **Giro del modelo** antes de cortar.
-- **Macho y hembra en rebanadas**, ajustado al espesor de la lamina.
-- Contador y aviso de lentitud en la pantalla de arranque.
+- **La vista previa ya no engana.** Para que todo cupiera en su presupuesto de
+  triangulos, el visor aligeraba cada pieza; en una piel de 3 mm eso funde las
+  dos caras y la pared desaparece. Los STL estaban bien, pero **en pantalla se
+  veia un amasijo de picos**. Ahora una pieza solo se aligera si sigue siendo la
+  misma pieza, y el techo de triangulos es ocho veces mayor.
+
+- **El corte usa todos los nucleos.** Las bandas se reparten entre hilos. En un
+  escaneo de 1,3 M de triangulos con cuatro nucleos: **157 s -> 133 s**.
+
+- **Vaciado por capas, de reserva.** Si el desplazamiento de la superficie no
+  entrega una piel cerrada, se corta el modelo en secciones, se encoge cada una
+  y se apilan. Encoger un contorno plano no puede cruzarse nunca. Y si nada
+  funciona, las piezas salen macizas y se dice por que: **nunca se entregan
+  esquirlas**.
+
+- **La pared nunca llega a cero.** Donde el modelo es mas fino que dos paredes,
+  antes quedaban dos caras pegadas sin material entre ellas y el laminador
+  rechazaba la pieza. Ahora queda pared fina, pero pieza cerrada.
+
+- **Se quita el vaciado trozo a trozo**, que era lo que llenaba el centro de la
+  figura de cajitas huecas.
 
 ### Que trae
 

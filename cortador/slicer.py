@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -291,6 +294,26 @@ def slice_model(mesh: trimesh.Trimesh,
 # construccion de piezas
 # ---------------------------------------------------------------------------
 
+def hilos_de_corte() -> int:
+    """Cuantos hilos se reparten el corte.
+
+    El trabajo caro es el CSG, que esta en C++ y suelta el interprete mientras
+    calcula, asi que repartir las bandas entre hilos aprovecha los nucleos de
+    verdad. Medido en una banda de 1,3 M de triangulos: x1,45 con cuatro
+    nucleos.
+
+    Son hilos y no procesos a proposito. En la app instalada, Python va
+    embebido dentro de Electron, y lanzar procesos hijos ahi es justo la clase
+    de cosa que falla en silencio en el ordenador de otro. Con
+    CORTADOR_HILOS=1 se desactiva.
+    """
+    try:
+        pedido = int(os.environ.get("CORTADOR_HILOS") or 0)
+    except ValueError:
+        pedido = 0
+    return max(1, min(8, pedido or (os.cpu_count() or 1)))
+
+
 def _build_chunks(mesh: trimesh.Trimesh,
                   plan: CutPlan,
                   cfg: SliceConfig,
@@ -300,28 +323,47 @@ def _build_chunks(mesh: trimesh.Trimesh,
     """Corta en trozos reales, eje por eje, reutilizando el resto de cada corte.
 
     Cortar primero en bandas y luego subdividirlas es mucho mas rapido que
-    recortar la malla completa contra cada celda.
+    recortar la malla completa contra cada celda. Las bandas del primer eje son
+    independientes entre si, asi que cada una se trocea en su propio hilo.
     """
-    out = []
-    done = 0
     total = plan.total_cells
     engine = engine or cfg.engine
-    bands_x = _split_axis(mesh, plan, 0, cfg, engine)
-    for i, band_x in bands_x:
+    bandas = _split_axis(mesh, plan, 0, cfg, engine)
+
+    hechas = [0]
+    candado = threading.Lock()
+
+    def avisar(cuantas: int) -> None:
+        with candado:
+            hechas[0] += cuantas
+            report(hechas[0], total, "Cortando")
+
+    def trocear(par):
+        i, band_x = par
+        celdas = []
         if band_x is None:
-            done += plan.counts[1] * plan.counts[2]
-            report(done, total, "Cortando")
-            continue
+            avisar(plan.counts[1] * plan.counts[2])
+            return i, celdas
         for j, band_y in _split_axis(band_x, plan, 1, cfg, engine):
             if band_y is None:
-                done += plan.counts[2]
-                report(done, total, "Cortando")
+                avisar(plan.counts[2])
                 continue
             for k, cell in _split_axis(band_y, plan, 2, cfg, engine):
-                done += 1
                 if cell is not None:
-                    out.append(((i, j, k), cell, None))
-                report(done, total, "Cortando")
+                    celdas.append(((i, j, k), cell, None))
+                avisar(1)
+        return i, celdas
+
+    obreros = min(hilos_de_corte(), len(bandas))
+    if obreros > 1:
+        with ThreadPoolExecutor(max_workers=obreros) as equipo:
+            resultados = list(equipo.map(trocear, bandas))
+    else:
+        resultados = [trocear(par) for par in bandas]
+
+    out = []
+    for _i, celdas in sorted(resultados, key=lambda r: r[0]):
+        out.extend(celdas)
     return out
 
 

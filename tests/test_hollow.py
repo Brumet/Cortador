@@ -613,3 +613,83 @@ def test_si_no_se_puede_vaciar_las_piezas_quedan_macizas_y_se_dice():
     assert any("macizas" in a for a in res.warnings), res.warnings
     for pieza in res.pieces:
         assert pieza.mesh.is_volume
+
+
+# ------------------------------------------------ la vista previa no enga�a
+def test_la_vista_previa_no_rompe_una_pieza_de_piel():
+    """Aligerar una cascara funde sus dos caras y la pared desaparece.
+
+    Los STL estaban bien; lo que se veia hecho un amasijo de picos era la vista
+    previa, que para que cupiera en su presupuesto de triangulos aligeraba cada
+    pieza y en una piel de 3 mm eso la destroza.
+    """
+    import trimesh
+    from cortador.exporters import _decimate
+
+    fuera = trimesh.creation.icosphere(subdivisions=4, radius=60.0)
+    dentro = trimesh.creation.icosphere(subdivisions=4, radius=57.0)
+    piel = trimesh.boolean.difference([fuera, dentro])
+    assert piel.is_watertight
+
+    ligera = _decimate(piel, max(60, int(len(piel.faces) * 0.1)))
+    assert ligera.is_watertight, "la vista previa no puede abrir una pieza"
+
+
+def test_la_previa_de_un_modelo_vaciado_ensena_lo_que_hay():
+    """Lo que se ve en pantalla tiene que ser la pieza, no un terron.
+
+    Con un presupuesto de triangulos ridiculo, el visor puede aligerar todo lo
+    que quiera siempre que la pieza siga siendo la misma: si la camara interior
+    se derrumba, el volumen se dispara y eso es lo que Brumet veia como un
+    amasijo de picos.
+    """
+    import json
+    import struct
+
+    import numpy as np
+    import trimesh
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.exporters import preview_payload
+    from cortador.slicer import slice_model
+
+    esfera = trimesh.creation.icosphere(subdivisions=4, radius=150.0)
+    res = slice_model(esfera, SliceConfig(printer=PrinterSpec(110, 110, 110),
+                                          hollow=True, wall=4.0,
+                                          labels=LabelOptions(enabled=False)))
+    datos = preview_payload(res, max_triangles=1000)      # presupuesto ridiculo
+    largo = struct.unpack("<I", datos[:4])[0]
+    cabecera = json.loads(datos[4:4 + largo])
+    puntos = np.frombuffer(datos[4 + largo:], dtype=np.float32).reshape(-1, 3)
+
+    for pieza, info in zip(res.pieces, cabecera["pieces"]):
+        trozo = puntos[info["offset"]:info["offset"] + info["count"]]
+        pintada = trimesh.Trimesh(vertices=trozo,
+                                  faces=np.arange(len(trozo)).reshape(-1, 3))
+        pintada.merge_vertices()
+        assert abs(pintada.volume - pieza.mesh.volume) < abs(pieza.mesh.volume) * 0.1, \
+            f"{pieza.name}: el visor ensena {pintada.volume:.0f} y la pieza es {pieza.mesh.volume:.0f}"
+
+
+# ------------------------------------------------------- corte en paralelo
+def test_cortar_con_varios_hilos_da_exactamente_lo_mismo():
+    """Repartir las bandas entre hilos no puede cambiar ni una pieza."""
+    import trimesh
+    from cortador import slicer
+    from cortador.config import LabelOptions, PrinterSpec, SliceConfig
+    from cortador.slicer import slice_model
+
+    modelo = trimesh.creation.icosphere(subdivisions=4, radius=150.0)
+    cfg = lambda: SliceConfig(printer=PrinterSpec(90, 90, 90), hollow=True,
+                              wall=4.0, labels=LabelOptions(enabled=False))
+
+    original = slicer.hilos_de_corte
+    try:
+        slicer.hilos_de_corte = lambda: 1
+        uno = slice_model(modelo, cfg())
+        slicer.hilos_de_corte = lambda: 4
+        varios = slice_model(modelo, cfg())
+    finally:
+        slicer.hilos_de_corte = original
+
+    assert [p.name for p in uno.pieces] == [p.name for p in varios.pieces]
+    assert abs(uno.hollow_volume - varios.hollow_volume) < 1e-6

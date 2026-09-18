@@ -231,7 +231,15 @@ def assembly_guide(result: SliceResult, model_name: str = "modelo") -> str:
 # vista previa para el navegador
 # ---------------------------------------------------------------------------
 
-def preview_payload(result: SliceResult, max_triangles: int = 300_000) -> bytes:
+#: techo de triangulos de la vista previa. Cada triangulo ocupa 36 bytes en el
+#: paquete y otros tantos de normales en la tarjeta grafica, asi que dos
+#: millones y medio son unos 90 MB de descarga y 180 MB de video: nada para una
+#: maquina de trabajo, y evita tener que destrozar la malla para que quepa.
+PREVIA_MAX = 2_500_000
+
+
+def preview_payload(result: SliceResult,
+                    max_triangles: int = PREVIA_MAX) -> bytes:
     """Empaqueta las piezas para el visor: cabecera JSON + triangulos float32.
 
     Formato: [uint32 tamano_cabecera][cabecera JSON][posiciones float32 ...]
@@ -281,10 +289,34 @@ def _padded_header(header: dict) -> bytes:
 
 
 def _decimate(mesh: trimesh.Trimesh, faces: int) -> trimesh.Trimesh:
+    """Aligera una pieza para el visor, pero nunca a costa de romperla.
+
+    Esto es lo que hacia que una figura vaciada se viera hecha un amasijo de
+    picos aunque los STL estuvieran perfectos. Una pieza de piel son dos
+    superficies separadas por 3 mm; al quitarle triangulos, el aligerado funde
+    las dos caras, la pared desaparece y lo que se pinta es un desastre. El
+    archivo estaba bien: lo que enganaba era la vista previa.
+
+    Asi que si el aligerado abre la pieza, se muestra entera. Pesa mas, pero es
+    lo que hay dentro del ZIP.
+    """
     try:
-        return mesh.simplify_quadric_decimation(face_count=faces)
+        ligera = mesh.simplify_quadric_decimation(face_count=faces)
     except Exception:
         return mesh
+    if ligera is None or not len(ligera.faces) or len(ligera.faces) >= len(mesh.faces):
+        return mesh
+    if mesh.is_watertight and not ligera.is_watertight:
+        return mesh
+    # cerrada puede quedarse igual y estar destrozada: si la camara interior se
+    # ha derrumbado, la pieza pasa a ser un terron macizo. Eso se ve en el
+    # volumen, no en la topologia.
+    try:
+        if mesh.is_volume and abs(ligera.volume - mesh.volume) > abs(mesh.volume) * 0.05:
+            return mesh
+    except Exception:
+        return mesh
+    return ligera
 
 
 def preview_glb(result: SliceResult) -> bytes:
