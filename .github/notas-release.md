@@ -20,6 +20,12 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
+- **El vaciado ya sirve para escaneos.** Con mallas densas y rugosas (un escaneo
+  con pelo, por ejemplo) la pared interior salia como un erizo de puas y el
+  modelo se quedaba en migajas mientras la app decia "100 % menos de material".
+  Ahora la cara de dentro se calcula sobre una copia suavizada y **queda lisa**;
+  el exterior conserva todos sus triangulos. Y si el vaciado sale mal, se dice,
+  en vez de entregar esquirlas.
 - **Se arregla el corte hueco, que estaba al reves.** Antes se cortaba primero y
   se vaciaba cada trozo despues, asi que cada pieza salia como una cajita
   cerrada, con paredes en las caras de corte, y los trozos del centro eran cubos
