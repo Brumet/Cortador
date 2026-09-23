@@ -799,3 +799,68 @@ def test_la_cara_interior_no_lleva_la_textura_del_modelo():
     dentro = piel.submesh([np.where(distancia > 1.0)[0]], append=True)
 
     assert grano(dentro) < grano(modelo) * 0.35, (grano(dentro), grano(modelo))
+
+
+# -------------------------------------------- placas mas finas que la pared
+def _con_faldon():
+    """Dos piernas y una placa de 4 mm colgando entre ellas.
+
+    Es la forma del samurai de Brumet: el faldon de la armadura es mas fino que
+    dos paredes de 3 mm, asi que no se puede vaciar.
+    """
+    import trimesh
+    piezas = []
+    for x in (-45.0, 45.0):
+        p = trimesh.creation.cylinder(radius=32.0, height=340.0, sections=48)
+        p.apply_translation([x, 0, 170.0])
+        piezas.append(p)
+    tronco = trimesh.creation.box(extents=[150.0, 70.0, 160.0])
+    tronco.apply_translation([0, 0, 420.0])
+    piezas.append(tronco)
+    faldon = trimesh.creation.box(extents=[130.0, 4.0, 150.0])
+    faldon.apply_translation([0, 0, 265.0])
+    piezas.append(faldon)
+    return trimesh.boolean.union(piezas)
+
+
+def test_una_placa_mas_fina_que_la_pared_se_queda_maciza():
+    """El error que Brumet vio como franjas parpadeando en el samurai.
+
+    Al vaciar una placa de 4 mm con 3 mm de pared, la cara interior sale por el
+    otro lado y quedan dos superficies pegadas sin nada entre medias. En el
+    visor eso son dos capas peleandose por el mismo pixel, y el laminador
+    rechaza la pieza. Lo correcto es no vaciar ahi.
+    """
+    from cortador.hollow import fraccion_membrana, hollow_mesh
+
+    modelo = _con_faldon()
+    piel, aviso = hollow_mesh(modelo, 3.0)
+
+    assert aviso is None and piel is not modelo
+    assert piel.is_watertight
+    assert fraccion_membrana(modelo, piel, 3.0, 12000) < 0.02
+    # y sigue siendo una piel: el faldon macizo no puede volver macizo el resto
+    assert piel.volume < modelo.volume * 0.25
+
+
+def test_un_escaneo_normal_no_paga_el_rehacer():
+    """Rehacer el hueco cuesta un minuto: solo cuando hay membranas de verdad.
+
+    En un escaneo rugoso sin placas finas, el 1 % de piel fina son esquirlas
+    del borde donde la camara se cierra. Rehacer por eso saldria carisimo y
+    devolveria el relieve a la cara interior.
+    """
+    from cortador.hollow import fraccion_membrana, _cascara, _superficie_interior
+
+    modelo = _peluda(subdivisiones=5, amplitud=6.0, frecuencia=3.0, radio=120.0)
+    cruda = _cascara(modelo, _superficie_interior(modelo, 5.0))
+
+    from cortador.hollow import MEMBRANA_MAX
+    assert fraccion_membrana(modelo, cruda, 5.0, 8000) < MEMBRANA_MAX
+
+
+def test_el_grosor_util_son_dos_lineas_de_extrusion():
+    from cortador.hollow import grosor_util
+
+    assert abs(grosor_util(3.0) - 1.2) < 1e-9
+    assert grosor_util(1.0) == 0.8          # nunca por debajo de 0,8 mm

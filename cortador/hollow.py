@@ -177,7 +177,7 @@ def hollow_mesh(mesh: trimesh.Trimesh,
             except Exception:
                 pass
 
-    mejor = None
+    mejor = mejor_hueco = None
     for factor in (1.0, 0.8, 0.6):
         _avisar("Solidificando la piel")
         interior = _superficie_interior(mesh, wall * factor)
@@ -187,13 +187,13 @@ def hollow_mesh(mesh: trimesh.Trimesh,
         if cascara is None or not _es_piel(cascara, mesh, wall * factor):
             continue
         if cascara.is_watertight:
-            mejor = cascara
+            mejor, mejor_hueco = cascara, interior
             break
         if mejor is None:
-            mejor = cascara
+            mejor, mejor_hueco = cascara, interior
 
     if mejor is not None:
-        return mejor, None
+        return _sin_membranas(mesh, mejor, mejor_hueco, wall, _avisar), None
 
     _avisar("Vaciando por capas")
     cascara = _piel_por_capas(mesh, wall, _avisar)
@@ -216,6 +216,78 @@ def _cascara(mesh: trimesh.Trimesh,
     despues -el volumen, el ahorro, la vista previa- sale mal.
     """
     return _cascara_limpia(boolean_op("difference", mesh, interior))
+
+
+def _sin_membranas(mesh: trimesh.Trimesh,
+                   cascara: trimesh.Trimesh,
+                   interior: Optional[trimesh.Trimesh],
+                   wall: float,
+                   avisar=None) -> trimesh.Trimesh:
+    """Quita del hueco las zonas donde no queda pared, solo una membrana.
+
+    Es lo que le paso al samurai: el faldon de la armadura es una placa de
+    cuatro milimetros, mas fina que dos paredes de tres. Al vaciarla, la cara de
+    dentro sale por el otro lado y quedan **dos superficies pegadas sin nada
+    entre medias**. En la vista previa eso se ve como franjas que parpadean -dos
+    capas peleandose por el mismo pixel-, el laminador rechaza la pieza y no hay
+    nada que imprimir ahi.
+
+    Lo correcto es no vaciar: si la placa es mas fina que la pared, la placa se
+    queda maciza. Se consigue recortando el hueco contra el modelo encogido el
+    **grosor minimo imprimible** -dos lineas de extrusion-, y no la pared
+    entera. Encogerlo la pared entera tambien quita las membranas, pero gasta el
+    doble de material y devuelve el relieve a la cara interior; medido en el
+    modelo de prueba:
+
+        sin recortar        391 cm3   10,3 % de la piel en membrana
+        recortado a 1,5 mm  446 cm3    0,8 %
+        recortado a 3,0 mm  757 cm3    0,0 %  pero el grano interior se triplica
+
+    Cuesta un minuto en un modelo mediano, asi que primero se mide y solo se
+    rehace si hay membranas de verdad.
+    """
+    def paso(texto):
+        if avisar is not None:
+            avisar(texto)
+
+    if interior is None:
+        return cascara
+    if fraccion_membrana(mesh, cascara, wall, MUESTRAS_MEMBRANA) <= MEMBRANA_MAX:
+        return cascara
+
+    paso("Quitando las membranas")
+    minimo = grosor_util(wall)
+    grupos = _prismas_interiores(mesh, minimo, avisar, paso_z=wall)
+    if grupos is None:
+        return cascara
+
+    partes = []
+    for grupo in grupos:
+        nucleo = _juntar_trozos(grupo)
+        grupo.clear()
+        if nucleo is None:
+            continue
+        trozo = boolean_op("intersection", interior, nucleo)
+        nucleo = None
+        if trozo is not None and len(trozo.faces):
+            partes.append(trozo)
+    if not partes:
+        return cascara
+
+    # los dos montones se tocan (una banda empieza donde acaba la anterior),
+    # asi que hay que unirlos con CSG y no pegandolos a mano
+    hueco = partes[0]
+    for otra in partes[1:]:
+        junto = boolean_op("union", hueco, otra)
+        if junto is None:
+            return cascara
+        hueco = junto
+    partes = None
+
+    nueva = _cascara_limpia(boolean_op("difference", mesh, hueco))
+    if nueva is None or not _es_piel(nueva, mesh, minimo) or not nueva.is_watertight:
+        return cascara
+    return nueva
 
 
 def espesor_recomendado(wall: float, medida) -> Optional[float]:
@@ -242,18 +314,23 @@ def espesor_recomendado(wall: float, medida) -> Optional[float]:
 PARED_MINIMA = 0.95
 
 
-def medir_pared(mesh: trimesh.Trimesh,
-                cascara: trimesh.Trimesh,
-                muestras: int = 4000):
-    """Espesor real de la piel, medido sobre la pieza terminada.
+def grosor_util(wall: float) -> float:
+    """Por debajo de esto no hay pared, hay una membrana.
 
-    No se da por supuesto: se siembran puntos por toda la cascara y se mide lo
-    que hay desde cada uno hasta la superficie del modelo. Los que caen en la
-    cara de fuera dan cero y no cuentan; los de la cara de dentro dan el espesor
-    de la pared justo ahi.
+    Dos lineas de extrusion: menos que eso no se puede imprimir, no se puede
+    pegar y, si las dos caras llegan a tocarse, el laminador rechaza la pieza.
+    """
+    return max(0.8, float(wall) * 0.4)
 
-    Devuelve (minimo, percentil 1, mediana) en milimetros, o None si no se ha
-    podido medir.
+
+def _grosores(mesh: trimesh.Trimesh,
+              cascara: trimesh.Trimesh,
+              muestras: int = 4000) -> Optional[np.ndarray]:
+    """Espesor de la piel en puntos repartidos por toda ella.
+
+    Se siembran puntos por la cascara y se mide lo que hay desde cada uno hasta
+    la superficie del modelo. Los que caen en la cara de fuera dan cero y no
+    cuentan; los de la cara de dentro dan el espesor de la pared justo ahi.
     """
     try:
         puntos, _ = trimesh.sample.sample_surface(cascara, int(muestras))
@@ -262,13 +339,51 @@ def medir_pared(mesh: trimesh.Trimesh,
         return None
     dentro = np.asarray(distancia, dtype=float)
     dentro = dentro[dentro > 0.02]
-    if len(dentro) < 20:
+    return dentro if len(dentro) >= 20 else None
+
+
+def medir_pared(mesh: trimesh.Trimesh,
+                cascara: trimesh.Trimesh,
+                muestras: int = 4000):
+    """Espesor real de la piel, medido sobre la pieza terminada.
+
+    No se da por supuesto: se mide. Devuelve (minimo, percentil 1, mediana) en
+    milimetros, o None si no se ha podido medir.
+    """
+    dentro = _grosores(mesh, cascara, muestras)
+    if dentro is None:
         return None
     return (float(dentro.min()), float(np.percentile(dentro, 1)),
             float(np.median(dentro)))
 
 
-#: maximo de secciones horizontales del vaciado por capas. Con muchas mas, un
+def fraccion_membrana(mesh: trimesh.Trimesh,
+                      cascara: trimesh.Trimesh,
+                      wall: float,
+                      muestras: int = 4000) -> float:
+    """Que parte de la piel se ha quedado en membrana en vez de en pared."""
+    dentro = _grosores(mesh, cascara, muestras)
+    if dentro is None:
+        return 0.0
+    return float((dentro < grosor_util(wall)).mean())
+
+
+#: por encima de esta fraccion de piel en membrana hay que rehacer el hueco.
+#:
+#: El limite separa dos cosas distintas. Un escaneo normal se queda en torno al
+#: 1 %: son las esquirlas del borde donde la camara se cierra, hilos de decimas
+#: de milimetro que ni se ven ni molestan. Una placa mas fina que dos paredes
+#: -el faldon de una armadura, una capa, una hoja- se va al 20 % y mas: eso ya
+#: es una sabana entera de espesor cero. Rehacer el hueco cuesta un minuto, asi
+#: que el limite se pone donde separa los dos casos y no donde sea mas estricto
+MEMBRANA_MAX = 0.03
+
+#: muestras para decidir si hay membranas. Con pocas, la decision cambia de una
+#: pasada a otra y el vaciado tarda dos segundos o un minuto segun el sorteo
+MUESTRAS_MEMBRANA = 8000
+
+
+#: maximo de secciones horizontales del vaciado por capas.#: maximo de secciones horizontales del vaciado por capas. Con muchas mas, un
 #: modelo de dos metros tardaria demasiado; con menos, el escalon se nota.
 CAPAS_MAX = 1400
 
@@ -310,7 +425,8 @@ def _aligerar(geom, tolerancia: float):
 
 def _prismas_interiores(mesh: trimesh.Trimesh,
                         wall: float,
-                        avisar=None) -> Optional[List[List]]:
+                        avisar=None,
+                        paso_z: float = 0.0) -> Optional[List[List]]:
     """El hueco calculado por secciones, en dos montones de rebanadas.
 
     Esta es la herramienta que no se rompe nunca.
@@ -354,7 +470,11 @@ def _prismas_interiores(mesh: trimesh.Trimesh,
     # que caiga justo en medio no lo ve nadie. A media pared el hueco se parte
     # por la mitad y el espesor medido sube; mas fino que eso ya no compensa lo
     # que tarda.
-    bandas = max(1, min(CAPAS_MAX, int(round(util / (wall * PASO_CAPA)))))
+    # `paso_z` separa la altura de banda del radio de encogido: cuando esto se
+    # usa solo para quitar las membranas, el radio es pequeno pero las bandas
+    # deben seguir siendo del tamano de la pared, o salen miles y no acaba.
+    grueso = float(paso_z) if paso_z and paso_z > 0 else wall
+    bandas = max(1, min(CAPAS_MAX, int(round(util / (grueso * PASO_CAPA)))))
     altura = util / bandas
     planos = (lo + wall) + np.arange(bandas + 1) * altura
 
