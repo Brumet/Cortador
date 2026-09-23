@@ -164,7 +164,7 @@ def slice_model(mesh: trimesh.Trimesh,
     work, informe = auto_repair(work, weld=cfg.weld)
     bodies = int(informe.cuerpos_antes)
     prepared_stats = mesh_stats(work)
-    plan = plan_cuts(work.bounds, cfg)
+    plan = plan_cuts(work.bounds, cfg, mesh=work)
     warnings = list(plan.warnings)
     if informe.cambiada:
         warnings.append(informe.resumen())
@@ -362,7 +362,12 @@ def _build_chunks(mesh: trimesh.Trimesh,
                 avisar(1)
         return i, celdas
 
-    obreros = min(hilos_de_corte(), len(bandas))
+    # Cada hilo se queda con su banda y con los trozos que va sacando, asi que
+    # la memoria se multiplica por el numero de hilos. En un modelo de resina de
+    # cinco millones de triangulos eso son gigas de diferencia, asi que los
+    # hilos se limitan por el tamano de la malla y no solo por los nucleos.
+    cabe = max(1, int(20_000_000 / max(len(mesh.faces), 1)))
+    obreros = min(hilos_de_corte(), len(bandas), cabe)
     if obreros > 1:
         with ThreadPoolExecutor(max_workers=obreros) as equipo:
             resultados = list(equipo.map(trocear, bandas))

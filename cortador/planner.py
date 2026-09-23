@@ -137,8 +137,13 @@ class CutPlan:
         }
 
 
-def plan_cuts(bounds: np.ndarray, cfg: SliceConfig) -> CutPlan:
-    """Decide los planos de corte a partir del tamano del modelo y la maquina."""
+def plan_cuts(bounds: np.ndarray, cfg: SliceConfig, mesh=None) -> CutPlan:
+    """Decide los planos de corte a partir del tamano del modelo y la maquina.
+
+    Si se pasa la malla y `cfg.snap_cuts` esta puesto, los planos interiores se
+    mueven al estrechamiento mas cercano -un tobillo, una muneca, un cuello-
+    siempre que las piezas sigan cabiendo. Ver `estrechamientos.py`.
+    """
     bounds = np.asarray(bounds, dtype=float)
     lo, hi = bounds[0], bounds[1]
     size = hi - lo
@@ -169,6 +174,15 @@ def plan_cuts(bounds: np.ndarray, cfg: SliceConfig) -> CutPlan:
             count = _divisions_needed(size[axis], usable[axis], cfg.kerf)
         edges.append(_even_edges(lo[axis], hi[axis], count))
 
+    if mesh is not None and getattr(cfg, "snap_cuts", False):
+        edges, movidos = _afinar_por_estrechamientos(mesh, edges, cfg, layer_axis, usable)
+        if movidos:
+            warnings.append(
+                f"{movidos} plano(s) de corte se han movido al estrechamiento mas "
+                "cercano (un tobillo, una muneca, un cuello): la cara de corte es "
+                "mas pequena, la junta se disimula y las piezas encajan mejor."
+            )
+
     plan = CutPlan(bounds=bounds, edges=edges, layer_axis=layer_axis,
                    mode=cfg.mode, kerf=float(cfg.kerf), warnings=warnings)
 
@@ -185,6 +199,34 @@ def plan_cuts(bounds: np.ndarray, cfg: SliceConfig) -> CutPlan:
             "o usar una maquina mas grande."
         )
     return plan
+
+
+def _afinar_por_estrechamientos(mesh, edges, cfg: SliceConfig, layer_axis: int,
+                                usable) -> Tuple[List[np.ndarray], int]:
+    """Lleva cada plano de corte al estrechamiento util mas cercano.
+
+    En el modo laminas no se toca el eje de apilado: ahi el espesor lo pone el
+    usuario y tiene que salir constante. Los otros dos ejes si, que son los que
+    parten brazos y piernas por la mitad.
+    """
+    from .estrechamientos import ajustar_cortes, estrechamientos
+
+    nuevos, movidos = list(edges), 0
+    for axis in range(3):
+        if cfg.mode == "slabs" and axis == layer_axis:
+            continue
+        if len(nuevos[axis]) < 3:
+            continue                             # sin cortes interiores no hay nada que mover
+        try:
+            candidatos = estrechamientos(mesh, axis)
+        except Exception:
+            continue
+        if not candidatos:
+            continue
+        bordes, cuantos = ajustar_cortes(nuevos[axis], candidatos, usable[axis])
+        nuevos[axis] = bordes
+        movidos += cuantos
+    return nuevos, movidos
 
 
 def _divisions_needed(size: float, capacity: float, kerf: float = 0.0) -> int:

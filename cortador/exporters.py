@@ -261,7 +261,8 @@ def preview_payload(result: SliceResult,
     for i, piece in enumerate(result.pieces):
         mesh = piece.mesh
         if ratio < 1.0 and len(mesh.faces) > 200:
-            mesh = _decimate(mesh, max(60, int(len(mesh.faces) * ratio)))
+            mesh = _decimate(mesh, max(60, int(len(mesh.faces) * ratio)),
+                             estricto=bool(result.config.hollow))
         tris = mesh.vertices[mesh.faces].astype(np.float32).reshape(-1, 3)
         data = np.ascontiguousarray(tris).tobytes()
         color = piece_color(i)
@@ -296,7 +297,8 @@ def _padded_header(header: dict) -> bytes:
     return raw + b" " * padding
 
 
-def _decimate(mesh: trimesh.Trimesh, faces: int) -> trimesh.Trimesh:
+def _decimate(mesh: trimesh.Trimesh, faces: int,
+              estricto: bool = True) -> trimesh.Trimesh:
     """Aligera una pieza para el visor, pero nunca a costa de romperla.
 
     Esto es lo que hacia que una figura vaciada se viera hecha un amasijo de
@@ -305,8 +307,11 @@ def _decimate(mesh: trimesh.Trimesh, faces: int) -> trimesh.Trimesh:
     las dos caras, la pared desaparece y lo que se pinta es un desastre. El
     archivo estaba bien: lo que enganaba era la vista previa.
 
-    Asi que si el aligerado abre la pieza, se muestra entera. Pesa mas, pero es
-    lo que hay dentro del ZIP.
+    `estricto` es para eso, para las piezas de piel: ahi tambien se exige que la
+    pieza siga cerrada, porque una piel que se abre ya se ve mal. En una pieza
+    maciza no hace falta -que el aligerado deje una arista suelta no se nota en
+    pantalla- y exigirlo dejaba sin aligerar un modelo de cinco millones de
+    triangulos: 192 MB de descarga para el navegador en vez de 90.
     """
     try:
         ligera = mesh.simplify_quadric_decimation(face_count=faces)
@@ -314,13 +319,15 @@ def _decimate(mesh: trimesh.Trimesh, faces: int) -> trimesh.Trimesh:
         return mesh
     if ligera is None or not len(ligera.faces) or len(ligera.faces) >= len(mesh.faces):
         return mesh
-    if mesh.is_watertight and not ligera.is_watertight:
+    if estricto and mesh.is_watertight and not ligera.is_watertight:
         return mesh
     # cerrada puede quedarse igual y estar destrozada: si la camara interior se
     # ha derrumbado, la pieza pasa a ser un terron macizo. Eso se ve en el
     # volumen, no en la topologia.
     try:
         if mesh.is_volume and abs(ligera.volume - mesh.volume) > abs(mesh.volume) * 0.05:
+            return mesh
+        if not mesh.is_volume and abs(ligera.area - mesh.area) > mesh.area * 0.1:
             return mesh
     except Exception:
         return mesh

@@ -411,6 +411,60 @@ horizontales** de una altura fija para construir por capas con laser o CNC
 rebanada**, no el espesor de la malla; las dos cosas se pueden combinar. Se
 exportan ademas los contornos en **SVG y DXF** (capa `CORTE` y capa `MARCA`).
 
+## Donde se corta: los estrechamientos
+
+Cortar una figura por la mitad del muslo es lo peor de los dos mundos: la cara
+de corte es enorme -mucha superficie que pegar y mucha junta a la vista- y cae
+justo donde mas se nota. Cortar por el tobillo, por la muneca o por el cuello es
+lo que hace cualquiera que haya montado una figura: la union es pequena, cae en
+un cambio de forma que la disimula, y las dos piezas encajan casi solas porque
+el contorno es inconfundible.
+
+Cortador mira la figura antes de repartir los planos y mueve cada corte al
+estrechamiento mas cercano. Dos reglas, por orden:
+
+1. **Ninguna pieza puede dejar de caber.** Lo primero es que entre en la
+   maquina; lo segundo, que la union sea comoda.
+2. **Cada plano se mueve solo dentro de su margen** (un tercio de la celda): si
+   el estrechamiento esta lejos, moverlo ahi dejaria una pieza enorme y otra
+   ridicula.
+
+Para encontrarlos no hace falta cortar secciones: basta con sumar, de una
+pasada sobre las caras, cuanto contorno tiene el modelo a cada altura -contando
+solo la parte de cada triangulo que mira de lado, porque una cara horizontal no
+aporta contorno-. En una figura de cinco millones de triangulos son dos
+segundos. Los extremos no cuentan: toda figura se estrecha hasta cero en la
+punta, y cortar ahi solo daria una tapita inutil.
+
+En el panel se puede apagar. Y en modo laminas no se toca el eje de apilado,
+porque ahi el espesor lo pones tu y tiene que salir constante.
+
+## Modelos muy pesados (resina)
+
+Una figura de resina de **5,2 millones de triangulos**, medida de principio a
+fin en una maquina de 16 GB:
+
+| paso | tiempo | pico de memoria |
+|---|---|---|
+| cargar y sanear | 48 s | 4,5 GB |
+| cortar en 8 piezas | 133 s | 9,6 GB |
+| vista previa | 14 s | 10,4 GB |
+
+Funciona, pero con 16 GB ya va justo. Dos cosas ayudan:
+
+- **Los hilos se limitan por el tamano de la malla**, no solo por los nucleos.
+  Cada hilo se queda con su banda y con los trozos que va sacando, asi que la
+  memoria se multiplica por el numero de hilos; en un modelo de cinco millones
+  de triangulos eso son gigas de diferencia.
+- **La vista previa si aligera las piezas macizas.** En una pieza de piel no se
+  puede -el aligerado funde las dos caras-, pero en una maciza que quede una
+  arista suelta no se nota, y exigirlo dejaba la descarga en 192 MB en vez de
+  90.
+
+Si el motor se queda sin memoria, el sistema lo mata y **la ventana lo dice**,
+con que hacer: bajar la altura, subir el espesor de piel o cerrar otros
+programas.
+
 ## Reparar la malla
 
 La mayoria de modelos descargados no son un solido limpio: son varias piezas

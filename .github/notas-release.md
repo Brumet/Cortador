@@ -20,34 +20,24 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
-- **La vista previa ya no engana.** Para que todo cupiera en su presupuesto de
-  triangulos, el visor aligeraba cada pieza; en una piel de 3 mm eso funde las
-  dos caras y la pared desaparece. Los STL estaban bien, pero **en pantalla se
-  veia un amasijo de picos**. Ahora una pieza solo se aligera si sigue siendo la
-  misma pieza -cerrada y con el mismo volumen- y el techo de triangulos es ocho
-  veces mayor.
+- **Una placa mas fina que la pared se queda maciza.** El faldon de una armadura
+  son cuatro milimetros: al vaciarlo con 3 mm de pared quedaban dos superficies
+  pegadas sin nada entre medias. En pantalla se veian como franjas que
+  parpadeaban, el laminador rechazaba la pieza y ahi no habia nada que imprimir.
+  Ahora se mide y, si hay membranas, esa zona no se vacia. Medido: del 10 % de
+  la piel en membrana al 0,7 %, con un 8 % mas de material.
 
-- **El espesor de la pared se mide y se dice.** En un escaneo, la cara de fuera
-  tiene relieve y la de dentro es lisa, asi que la pared no puede medir lo mismo
-  en todas partes. En vez de prometerlo, Cortador siembra puntos por toda la
-  piel, mide lo que hay hasta la superficie y te dice el resultado y que espesor
-  pedir para que el minimo sea el que quieres. Probado: si pides 3 y el 1 % mas
-  fino sale en 1,2, pidiendo 4,8 sale en 3,05.
+- **Se corta por los estrechamientos.** Antes los planos caian a partes iguales,
+  aunque eso partiera un muslo por la mitad. Ahora Cortador mira la figura y
+  mueve cada corte al tobillo, la muneca o el cuello mas cercano -siempre que la
+  pieza siga cabiendo-: la cara de corte es mucho mas pequena, la junta se
+  disimula en el cambio de forma y las piezas encajan casi solas.
 
-- **El corte usa todos los nucleos** y el vaciado tambien. En un escaneo de
-  1,3 M de triangulos con cuatro nucleos: 157 s -> 133 s el corte, y x2,9 el
-  encogido de contornos.
-
-- **Menos memoria.** El vaciado por capas llegaba a diez gigas y el sistema
-  mataba el proceso. Ahora las rebanadas se guardan como triangulos sueltos en
-  vez de como mallas y se sueltan en cuanto no hacen falta.
-
-- **Si el motor se muere, la ventana se entera.** Antes se quedaba girando para
-  siempre; ahora dice que ha pasado y por que.
-
-- **Los ajustes del laminador hablan del ventilador.** Con 0 % de relleno, las
-  capas que cierran sobre el hueco van en puente: no hace falta relleno para
-  sostenerlas, hace falta ventilador de capa a tope y velocidad de puente baja.
+- **Modelos de resina muy pesados.** Una figura de 5,2 millones de triangulos
+  entera: 48 s cargar, 133 s cortar, 14 s la vista previa. Los hilos se limitan
+  ahora por el tamano de la malla y no solo por los nucleos, porque cada hilo se
+  queda con su banda y la memoria se multiplica. Y la vista previa vuelve a
+  aligerar las piezas macizas, que se habian quedado sin aligerar.
 
 ### Que trae
 

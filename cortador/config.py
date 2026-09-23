@@ -176,6 +176,11 @@ class SliceConfig:
     solid_caps: bool = True
     #: en las laminas huecas, anadir una lengueta interior donde grabar el nombre
     label_tab: bool = True
+    #: mover los planos de corte al estrechamiento mas cercano (un tobillo, una
+    #: muneca, un cuello) cuando lo haya y las piezas sigan cabiendo. La cara de
+    #: corte sale mas pequena, la junta se disimula en el cambio de forma y las
+    #: dos piezas encajan casi solas
+    snap_cuts: bool = True
     #: separar en piezas distintas los trozos sueltos de una misma celda
     #: (una lamina a la altura de las piernas son dos anillos independientes)
     split_islands: bool = True
