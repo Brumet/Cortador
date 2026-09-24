@@ -5,14 +5,18 @@ Blender.
 
 ## Instalar
 
-1. Descarga `cortador-blender.zip` (o comprime la carpeta `cortador_blender`).
-2. En Blender: **Editar → Preferencias → Complementos → Instalar desde
-   disco**, y elige el zip.
-3. Actívalo. Aparece en la **barra lateral de la vista 3D** (tecla `N`),
-   pestaña **Cortador**.
+Hay dos zips porque Blender cambió la forma de instalar complementos en la
+4.2. Mira tu versión en **Blender → Acerca de**:
 
-Funciona en Blender 3.6 y posteriores. En 4.2 y posteriores se instala como
-extensión.
+* **Blender 4.2 o más nuevo** → `cortador-extension.zip`
+* **Blender 3.6 a 4.1** → `cortador-blender.zip`
+
+En los dos casos: **Editar → Preferencias → Complementos**, la flecha `∨` de
+arriba a la derecha, **Instalar desde disco…**, y eliges el zip. Se activa
+solo; si no, búscalo como «Cortador» y marca la casilla.
+
+Aparece en la **barra lateral de la vista 3D** (tecla `N`), pestaña
+**Cortador**.
 
 ## Cómo se usa
 
