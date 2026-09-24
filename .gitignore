@@ -22,3 +22,4 @@ packaging/__pycache__/
 escritorio/node_modules/
 escritorio/motor/
 escritorio/dist/
+blender/cortador_blender/__pycache__/
