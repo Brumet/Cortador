@@ -439,6 +439,27 @@ punta, y cortar ahi solo daria una tapita inutil.
 En el panel se puede apagar. Y en modo laminas no se toca el eje de apilado,
 porque ahi el espesor lo pones tu y tiene que salir constante.
 
+## Cargar un OBJ
+
+Cortador lee STL, **OBJ**, PLY, OFF, 3MF, GLB/glTF, DAE y ZIP. El OBJ es texto
+plano, y ahi cada programa escribe a su manera; dos cosas atragantaban al lector
+y ahora se arreglan solas:
+
+- **La marca de Windows** (BOM) al principio del archivo. Sin quitarla, al
+  lector se le pierde el primer vertice y revienta con un `index 7 is out of
+  bounds` que no le dice nada a nadie.
+- **La coma decimal.** Un exportador configurado en espanol escribe
+  `v 1,5 2,0 0,0`. En un OBJ una coma no significa nada, asi que se cambia por
+  un punto y listo.
+
+Si aun asi no se puede leer, el mensaje dice que se ha intentado y que hacer, en
+vez de soltar el error del lector. Y un archivo con solo vertices -una nube de
+puntos- lo dice con esas palabras.
+
+**Para modelos grandes, mejor STL binario.** No es capricho: en una figura de
+5,2 millones de triangulos, el STL son 262 MB y el OBJ 232, pero el OBJ deja el
+pico de memoria en 9,2 GB frente a 6,6. El tope de subida es de 1 GB.
+
 ## Modelos muy pesados (resina)
 
 Una figura de resina de **5,2 millones de triangulos**, medida de principio a

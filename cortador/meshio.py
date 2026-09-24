@@ -17,6 +17,10 @@ INPUT_FORMATS = (
 )
 OUTPUT_FORMATS = (".stl", ".obj", ".ply", ".3mf", ".glb")
 
+#: formatos que son texto plano, donde un exportador puede colar suciedad que
+#: atraganta al lector sin que el archivo este roto de verdad
+FORMATOS_TEXTO = (".obj", ".off", ".dae", ".xaml")
+
 
 class MeshError(RuntimeError):
     pass
@@ -30,29 +34,120 @@ def load_mesh(source: Union[str, bytes, os.PathLike, io.IOBase],
     Acepta una ruta, bytes o un objeto tipo archivo. Las escenas con varios
     objetos se combinan en una sola malla (es lo que queremos: cortamos el
     conjunto, no cada pieza por separado).
+
+    Si el archivo es de texto -OBJ sobre todo- y el lector se atraganta, se
+    intenta una segunda vez con el texto saneado: ver `sanear_texto`.
     """
     if isinstance(source, (bytes, bytearray)):
         if not file_type:
             raise MeshError("Hace falta indicar el formato cuando se pasan bytes")
-        obj = trimesh.load(io.BytesIO(bytes(source)), file_type=file_type.lstrip("."),
-                           force="mesh", process=False)
+        obj = _leer_bytes(bytes(source), file_type)
     elif isinstance(source, (str, os.PathLike)):
         path = os.fspath(source)
         if not os.path.exists(path):
             raise MeshError(f"No existe el archivo: {path}")
-        obj = trimesh.load(path, force="mesh", process=False)
+        obj = _leer_ruta(path)
     else:
         if not file_type:
             raise MeshError("Hace falta indicar el formato del flujo de entrada")
-        obj = trimesh.load(source, file_type=file_type.lstrip("."), force="mesh",
-                           process=False)
+        obj = _leer_bytes(source.read(), file_type)
 
     mesh = _as_single_mesh(obj)
     if mesh is None or len(mesh.faces) == 0:
-        raise MeshError("El archivo no contiene geometria triangular utilizable")
+        raise MeshError(
+            "El archivo no contiene ninguna cara: son solo puntos o curvas. "
+            "Exportalo como malla (STL o OBJ con caras) desde tu programa."
+        )
     if repair:
         mesh = repair_mesh(mesh)
     return mesh
+
+
+def sanear_texto(datos: bytes) -> Optional[bytes]:
+    """Quita de un modelo de texto lo que atraganta al lector, o None si no hay nada.
+
+    Dos cosas que se ven constantemente y que no son culpa de nadie:
+
+    * La **marca de orden de bytes** que Windows pone al principio de un archivo
+      de texto. Al lector de OBJ se le pierde el primer vertice y luego revienta
+      con un "index out of bounds" que no le dice nada a nadie.
+    * La **coma decimal**. Un exportador configurado en espanol escribe
+      `v 1,5 2,0 0,0` y el lector no puede con ello. En un OBJ una coma no
+      significa nada por si sola, asi que cambiarla por un punto es seguro.
+    """
+    cambiado = False
+    if datos.startswith(b"\xef\xbb\xbf"):
+        datos = datos[3:]
+        cambiado = True
+    if b"," in datos:
+        lineas = datos.split(b"\n")
+        for i, linea in enumerate(lineas):
+            cabeza = linea[:3].lstrip()
+            if cabeza[:2] in (b"v ", b"vn", b"vt") or cabeza[:2] == b"f ":
+                if b"," in linea:
+                    lineas[i] = linea.replace(b",", b".")
+                    cambiado = True
+        if cambiado:
+            datos = b"\n".join(lineas)
+    return datos if cambiado else None
+
+
+def _cargar(fuente, file_type: Optional[str] = None):
+    return trimesh.load(fuente, file_type=file_type, force="mesh", process=False)
+
+
+def _leer_ruta(path: str):
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        return _cargar(path)
+    except Exception as exc:
+        if ext not in FORMATOS_TEXTO:
+            raise MeshError(_por_que(path, exc)) from exc
+    with open(path, "rb") as fh:
+        limpio = sanear_texto(fh.read())
+    if limpio is None:
+        raise MeshError(_por_que(path, None))
+    try:
+        return _cargar(io.BytesIO(limpio), ext.lstrip("."))
+    except Exception as exc:
+        raise MeshError(_por_que(path, exc)) from exc
+
+
+def _leer_bytes(datos: bytes, file_type: str):
+    tipo = file_type.lstrip(".").lower()
+    try:
+        return _cargar(io.BytesIO(datos), tipo)
+    except Exception as exc:
+        if f".{tipo}" not in FORMATOS_TEXTO:
+            raise MeshError(_por_que(f"modelo.{tipo}", exc)) from exc
+    limpio = sanear_texto(datos)
+    if limpio is None:
+        raise MeshError(_por_que(f"modelo.{tipo}", None))
+    try:
+        return _cargar(io.BytesIO(limpio), tipo)
+    except Exception as exc:
+        raise MeshError(_por_que(f"modelo.{tipo}", exc)) from exc
+
+
+def _por_que(nombre: str, exc: Optional[BaseException]) -> str:
+    """Un mensaje que diga algo, en vez del error del lector.
+
+    El lector de OBJ suelta cosas como "index 7 is out of bounds": eso no ayuda
+    a nadie a arreglar su archivo. Aqui se dice que se ha intentado y que hacer.
+    """
+    ext = os.path.splitext(nombre)[1].lower() or "?"
+    detalle = f" ({type(exc).__name__}: {str(exc)[:120]})" if exc is not None else ""
+    if ext == ".obj":
+        return (
+            f"No se ha podido leer el OBJ{detalle}. Ya se ha probado quitando la "
+            "marca de Windows del principio y cambiando las comas decimales por "
+            "puntos. Lo mas rapido: abrelo en tu programa y guardalo como **STL "
+            "binario**, que ademas ocupa la mitad y se lee diez veces mas rapido."
+        )
+    return (
+        f"No se ha podido leer el archivo {ext}{detalle}. Prueba a exportarlo "
+        "como STL binario desde el programa donde lo tengas."
+    )
 
 
 def _as_single_mesh(obj) -> Optional[trimesh.Trimesh]:

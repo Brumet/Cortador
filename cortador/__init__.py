@@ -17,7 +17,7 @@ from .meshio import load_mesh, mesh_stats
 from .planner import CutPlan, estimate_plan, plan_cuts
 from .slicer import Piece, SliceResult, slice_model
 
-__version__ = "0.8.6"
+__version__ = "0.8.7"
 
 __all__ = [
     "PrinterSpec", "LabelOptions", "JoineryOptions", "SliceConfig",

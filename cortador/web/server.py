@@ -31,7 +31,10 @@ from ..planner import estimate_plan
 from ..slicer import SliceResult, slice_model
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-MAX_UPLOAD = 400 * 1024 * 1024  # 400 MB
+#: tope de subida. Un modelo de resina de cinco millones de triangulos son
+#: 260 MB en STL y 230 en OBJ; con 400 MB se quedaban fuera los de diez
+#: millones, que es justo lo que se exporta para resina
+MAX_UPLOAD = 1024 * 1024 * 1024  # 1 GB
 JOB_TTL = 6 * 3600
 
 
@@ -105,18 +108,34 @@ def create_app() -> FastAPI:
     @app.post("/api/modelo")
     async def subir_modelo(archivo: UploadFile = File(...)):
         _cleanup_old_jobs()
-        data = await archivo.read()
-        if not data:
-            raise HTTPException(status_code=400, detail="El archivo esta vacio")
-        if len(data) > MAX_UPLOAD:
-            raise HTTPException(status_code=413, detail="El archivo supera los 400 MB")
         job_id = uuid.uuid4().hex[:12]
         directory = os.path.join(ROOT, job_id)
         os.makedirs(directory, exist_ok=True)
         ext = os.path.splitext(archivo.filename or "modelo.stl")[1].lower() or ".stl"
         path = os.path.join(directory, f"entrada{ext}")
+
+        # a disco de trozo en trozo, no de golpe: leer entero un modelo de
+        # medio giga se lo come en memoria dos veces -el que llega y el que se
+        # escribe- justo antes de la parte que ya gasta gigas
+        escrito = 0
         with open(path, "wb") as fh:
-            fh.write(data)
+            while True:
+                trozo = await archivo.read(8 * 1024 * 1024)
+                if not trozo:
+                    break
+                escrito += len(trozo)
+                if escrito > MAX_UPLOAD:
+                    fh.close()
+                    shutil.rmtree(directory, ignore_errors=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(f"El archivo supera el limite de "
+                                f"{MAX_UPLOAD // (1024 * 1024)} MB. Exportalo como "
+                                "STL binario, que ocupa bastante menos."))
+                fh.write(trozo)
+        if not escrito:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise HTTPException(status_code=400, detail="El archivo esta vacio")
         try:
             mesh = load_mesh(path, repair=False)
         except MeshError as exc:

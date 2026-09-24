@@ -20,24 +20,32 @@ ningun modelo se sube a ningun servidor.
 
 ### Novedades de esta version
 
+- **Los OBJ raros ya se cargan.** El OBJ es texto plano y cada programa lo
+  escribe a su manera. Dos cosas lo atragantaban y ahora se arreglan solas: la
+  marca de Windows al principio del archivo -que hacia perder el primer vertice
+  y reventar con un "index out of bounds"- y la coma decimal de los
+  exportadores configurados en espanol. Si aun asi no se puede leer, el mensaje
+  dice que se ha intentado y que hacer.
+
+- **El tope de subida pasa de 400 MB a 1 GB**, y el archivo va a disco de trozo
+  en trozo en vez de entero en memoria. Una figura de resina de diez millones de
+  triangulos se quedaba fuera.
+
 - **Una placa mas fina que la pared se queda maciza.** El faldon de una armadura
   son cuatro milimetros: al vaciarlo con 3 mm de pared quedaban dos superficies
-  pegadas sin nada entre medias. En pantalla se veian como franjas que
-  parpadeaban, el laminador rechazaba la pieza y ahi no habia nada que imprimir.
-  Ahora se mide y, si hay membranas, esa zona no se vacia. Medido: del 10 % de
-  la piel en membrana al 0,7 %, con un 8 % mas de material.
+  pegadas sin nada entre medias, que en pantalla se ven como franjas que
+  parpadean y que el laminador rechaza. Medido: del 10 % de la piel en membrana
+  al 0,7 %.
 
-- **Se corta por los estrechamientos.** Antes los planos caian a partes iguales,
-  aunque eso partiera un muslo por la mitad. Ahora Cortador mira la figura y
-  mueve cada corte al tobillo, la muneca o el cuello mas cercano -siempre que la
-  pieza siga cabiendo-: la cara de corte es mucho mas pequena, la junta se
-  disimula en el cambio de forma y las piezas encajan casi solas.
+- **Se corta por los estrechamientos.** Los planos caian a partes iguales aunque
+  eso partiera un muslo por la mitad. Ahora Cortador mira la figura y mueve cada
+  corte al tobillo, la muneca o el cuello mas cercano, siempre que la pieza siga
+  cabiendo: la cara de corte es mucho mas pequena y la junta se disimula.
 
 - **Modelos de resina muy pesados.** Una figura de 5,2 millones de triangulos
   entera: 48 s cargar, 133 s cortar, 14 s la vista previa. Los hilos se limitan
-  ahora por el tamano de la malla y no solo por los nucleos, porque cada hilo se
-  queda con su banda y la memoria se multiplica. Y la vista previa vuelve a
-  aligerar las piezas macizas, que se habian quedado sin aligerar.
+  ahora por el tamano de la malla, y la vista previa vuelve a aligerar las
+  piezas macizas.
 
 ### Que trae
 

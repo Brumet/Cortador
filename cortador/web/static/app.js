@@ -238,10 +238,14 @@ async function cargarArchivo(file) {
   $('vacio').hidden = true;
   $('abriendo').hidden = false;
   $('abriendo-etapa').textContent = 'Leyendo ' + file.name;
+  // en un modelo de cinco millones de triangulos, leerlo y sanearlo son cerca
+  // de dos minutos: decirlo evita que parezca que se ha quedado colgado
+  const mb = file.size / 1e6;
   $('abriendo-txt').textContent =
-    file.size > 20e6 ? 'Son ' + (file.size / 1e6).toFixed(0)
-      + ' MB: puede tardar un minuto. No cierres la ventana.'
-      : 'Revisando la malla y reparandola si hace falta...';
+    mb > 150 ? 'Son ' + mb.toFixed(0) + ' MB. Leer y sanear una malla de este '
+      + 'tamano tarda un par de minutos y necesita bastante memoria. No cierres la ventana.'
+      : mb > 20 ? 'Son ' + mb.toFixed(0) + ' MB: puede tardar un minuto. No cierres la ventana.'
+        : 'Revisando la malla y reparandola si hace falta...';
   const datos = new FormData();
   datos.append('archivo', file);
   try {
@@ -269,7 +273,14 @@ async function cargarArchivo(file) {
   } catch (err) {
     $('nombre-archivo').textContent = 'ningun modelo cargado';
     $('vacio').hidden = !!estado.trabajo;
-    mostrarAvisos([err.message], true);
+    // "Failed to fetch" no le dice nada a nadie: si el motor se ha caido -y con
+    // una malla enorme suele ser por memoria- hay que decirlo con esas palabras
+    const roto = /failed to fetch|networkerror|load failed/i.test(err.message || '');
+    mostrarAvisos([roto
+      ? 'Se ha perdido la conexion con el motor mientras leia el archivo. Con un '
+        + 'modelo muy grande suele ser que se ha quedado sin memoria: prueba a '
+        + 'cerrar otros programas, o a exportarlo con menos triangulos.'
+      : err.message], true);
   } finally {
     $('abriendo').hidden = true;
   }
