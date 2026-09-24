@@ -59,6 +59,10 @@ class Ajustes:
     giro: float = 0.0
     #: piezas mas pequenas que esto se avisan
     minimo: float = 5.0
+    #: grabar en cada pieza su nombre y el de sus vecinas
+    marcar: bool = True
+    #: hondo del grabado
+    hondo: float = 0.6
 
 
 @dataclass

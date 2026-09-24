@@ -21,7 +21,7 @@ import os
 from typing import Optional
 
 import bpy
-from bpy.props import (EnumProperty, FloatProperty, IntProperty,
+from bpy.props import (BoolProperty, EnumProperty, FloatProperty, IntProperty,
                        PointerProperty, StringProperty)
 from bpy.types import Operator, Panel, PropertyGroup
 
@@ -93,6 +93,15 @@ class CortadorAjustes(PropertyGroup):
         name="Esquirla", default=5.0, min=0.0, max=200.0,
         description="Piezas mas pequenas que esto se avisan como esquirlas",
     )
+    marcar: BoolProperty(
+        name="Marcar las piezas", default=True,
+        description="Graba en la cara interior el nombre de la pieza y el de "
+                    "las que van pegadas a ella",
+    )
+    hondo: FloatProperty(
+        name="Hondo de la marca", default=0.6, min=0.1, max=3.0,
+        description="Cuanto se hunde el grabado, en milimetros",
+    )
     carpeta: StringProperty(
         name="Carpeta", subtype="DIR_PATH",
         description="Donde se guardan los STL de las piezas",
@@ -114,6 +123,8 @@ def _ajustes(contexto) -> Ajustes:
         pared=datos.pared / mm,
         giro=datos.giro * 3.14159265358979 / 180.0,
         minimo=datos.minimo / mm,
+        marcar=datos.marcar,
+        hondo=datos.hondo / mm,
     )
 
 
@@ -311,6 +322,9 @@ class CORTADOR_PT_panel(Panel):
 
         trazo.prop(datos, "pared")
         trazo.prop(datos, "minimo")
+        trazo.prop(datos, "marcar")
+        if datos.marcar:
+            trazo.prop(datos, "hondo")
 
         trazo.operator("cortador.analizar", icon="INFO")
         trazo.operator("cortador.cortar", icon="MOD_BEVEL")

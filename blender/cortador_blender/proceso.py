@@ -23,6 +23,7 @@ import bpy
 from mathutils import Vector
 
 from . import cortar as motor
+from . import marcas
 from . import plan
 from .plan import Ajustes, Piso
 
@@ -186,6 +187,8 @@ class Trabajo:
         self.ajustes = ajustes
         self.resultado = Resultado()
         self.eje = plan.eje_de(objeto)
+        esquinas = [objeto.matrix_world @ Vector(v) for v in objeto.bound_box]
+        self.centro = sum(esquinas, Vector()) / len(esquinas)
 
     def pasos(self) -> Iterator[Tuple[str, float]]:
         ajustes = self.ajustes
@@ -241,7 +244,8 @@ class Trabajo:
         # --- rematar, medir y bautizar -------------------------------------
         yield ("cerrando y midiendo las piezas", 0.88)
         perfil = ajustes.perfil
-        cuenta: Dict[Tuple[int, int], int] = {}
+        vivas: List[Tuple[bpy.types.Object, int, int]] = []
+        rotas: Dict[str, Tuple[int, int]] = {}
         for objeto, piso, gajo in finales:
             _mudar(objeto, coleccion)
             abiertas, quedan = motor.cerrar_huecos(objeto)
@@ -249,26 +253,77 @@ class Trabajo:
                 # el remate se la comio entera: era basura del corte
                 bpy.data.objects.remove(objeto, do_unlink=True)
                 continue
+            vivas.append((objeto, piso, gajo))
+            if quedan:
+                rotas[objeto.name] = (abiertas, quedan)
+
+        # Las laminas se numeran dando la vuelta al piso, no por el gajo del
+        # que salieron. Es lo que hace util el nombre: la L4 esta entre la L3 y
+        # la L5, se mire por donde se mire. Numerarlas por el gajo dejaba diez
+        # piezas llamadas P1-L2, P1-L2b, P1-L2c... que no dicen nada.
+        for piso in sorted({p for _, p, _ in vivas}):
+            suyas = [o for o, q, _ in vivas if q == piso]
+            suyas.sort(key=lambda o: self._vuelta(o))
+            for numero, objeto in enumerate(suyas, 1):
+                objeto.name = "P{:d}-L{:d}".format(piso + 1, numero)
+
+        for objeto, piso, gajo in vivas:
             _, _, alto = motor.medidas(objeto)
             ancho, fondo, entra, _ = plan.planta(plan.nube(objeto), perfil)
-            repetida = cuenta.get((piso, gajo), 0)
-            cuenta[(piso, gajo)] = repetida + 1
-            objeto.name = "P{:02d}-G{:02d}{}".format(
-                piso + 1, gajo + 1,
-                "" if not repetida else "-{}".format(repetida + 1))
             pieza = Pieza(objeto, piso, gajo, ancho, fondo, alto,
                           len(objeto.data.polygons))
-            pieza.cerrada = not quedan
+            pieza.cerrada = objeto.name not in rotas
             pieza.cabe = entra and alto <= perfil.alto_util()
             self.resultado.piezas.append(pieza)
-            if quedan:
-                self.resultado.avisos.append(
-                    f"{objeto.name}: quedan {quedan} aristas sin cerrar de "
-                    f"{abiertas} que habia; la malla de partida esta rota ahi")
+        for nombre, (abiertas, quedan) in rotas.items():
+            self.resultado.avisos.append(
+                f"{nombre}: quedan {quedan} aristas sin cerrar de {abiertas} "
+                "que habia; la malla de partida esta rota ahi")
+
+        # --- las marcas ------------------------------------------------------
+        if ajustes.marcar and self.resultado.piezas:
+            yield ("grabando las marcas", 0.94)
+            for texto, avance in self._marcar():
+                yield (texto, avance)
 
         self.objeto.hide_set(True)
         self._resumir()
         yield ("listo", 1.0)
+
+    def _vuelta(self, objeto: bpy.types.Object) -> Tuple[float, float, float]:
+        """Donde cae una pieza dando la vuelta al piso: angulo, radio y altura."""
+        centro = _centro(objeto)
+        return (math.atan2(centro.y - self.eje.y, centro.x - self.eje.x),
+                math.hypot(centro.x - self.eje.x, centro.y - self.eje.y),
+                centro.z)
+
+    def _marcar(self):
+        """Graba en cada pieza su nombre y el de las que van pegadas a ella."""
+        piezas = self.resultado.piezas
+        marcos = {}
+        for pieza in piezas:
+            marco = marcas.marco_interior(pieza.objeto, self.centro)
+            if marco is not None:
+                marcos[pieza.objeto.name] = marco
+        vecinos = marcas.vecindario(piezas, marcos)
+        hechas = 0
+        for n, pieza in enumerate(piezas):
+            nombre = pieza.objeto.name
+            if nombre not in marcos:
+                continue
+            if marcas.marcar(pieza.objeto, self.centro, nombre.replace("-", "/"),
+                             {lado: quien.replace("-", "/")
+                              for lado, quien in vecinos.get(nombre, {}).items()},
+                             self.ajustes.hondo):
+                hechas += 1
+            if n % 10 == 0:
+                yield (f"grabando marcas ({n + 1}/{len(piezas)})",
+                       0.94 + 0.05 * n / max(len(piezas), 1))
+        sin = len(piezas) - hechas
+        if sin:
+            self.resultado.avisos.append(
+                f"{sin} piezas se quedaron sin marcar: no habia cara interior "
+                "suficiente o el grabado habria roto la pieza.")
 
     def _resumir(self) -> None:
         res = self.resultado

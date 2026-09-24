@@ -27,8 +27,26 @@ El espesor y la escala los pones tú, que para eso los ves:
    dice en cuántos pisos va a partirla y cuántos gajos lleva cada piso, con
    las medidas de cada pieza.
 4. Pulsa **Cortar**. Las piezas quedan en una colección llamada `Cortador`,
-   con nombres del tipo `P02-G05`: piso 2, gajo 5.
+   con nombres del tipo `P2-L5`: piso 2, lámina 5. Las láminas se numeran
+   dando la vuelta al piso, así que la L4 siempre está entre la L3 y la L5.
 5. Elige carpeta y pulsa **Guardar los STL**.
+
+## Las marcas
+
+Cada pieza lleva grabado en la cara de dentro, con medio milímetro de hondo,
+su propio nombre en el centro y, más pequeño, el de la pieza que va pegada
+por arriba, por abajo, por la izquierda y por la derecha:
+
+```
+            P1/L3
+     P2/L2  P2/L3  P2/L4
+            P3/L3
+```
+
+Así una pieza suelta encima de la mesa ya dice dónde va y por dónde sigue,
+sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
+montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
+hueca es una tira de tres milímetros donde no cabe ni una letra.
 
 ## Qué hace por dentro
 
