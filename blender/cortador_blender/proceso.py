@@ -30,6 +30,22 @@ from .plan import Ajustes, Piso
 #: nombre de la coleccion donde se dejan las piezas
 COLECCION = "Cortador"
 
+#: el ultimo corte que se hizo, para que el plano sepa de que piezas habla
+ULTIMO = None
+
+
+def vigente():
+    """El ultimo resultado, si sus piezas siguen existiendo en el archivo."""
+    if ULTIMO is None or not ULTIMO.piezas:
+        return None
+    for pieza in ULTIMO.piezas:
+        try:
+            if pieza.objeto.name not in bpy.data.objects:
+                return None
+        except ReferenceError:
+            return None
+    return ULTIMO
+
 
 @dataclass
 class Pieza:
@@ -55,6 +71,10 @@ class Resultado:
     piezas: List[Pieza] = field(default_factory=list)
     pisos: List[Piso] = field(default_factory=list)
     avisos: List[str] = field(default_factory=list)
+    #: para cada pieza, que pieza tiene a cada lado
+    vecinos: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    #: como se llamaba la figura de la que salio todo
+    figura: str = ""
 
     @property
     def abiertas(self) -> List[Pieza]:
@@ -163,12 +183,23 @@ def _apretar(objeto: bpy.types.Object, perfil, vueltas: int = 7
             if entra and puntos[:, 2].ptp() <= perfil.alto_util():
                 hechas.append(trozo)
                 continue
+            # Se guarda la malla antes de cada intento. Un corte que no llega a
+            # separar no es inofensivo: deja el tabique hecho por dentro, y si
+            # luego la parte el corte siguiente, cada mitad se queda con ese
+            # tabique dentro y el volumen de la pieza se dispara. En el toro de
+            # prueba dos piezas salian con 18 mm de espesor aparente en vez de
+            # 3,4. Si el intento no separa, se devuelve la malla de antes.
+            respaldo = trozo.data.copy()
             partido = [trozo]
             for corte in _planos_para_partir(puntos, rumbo, perfil.alto_util()):
                 motor.cortar_objeto(trozo, [corte])
                 partido = motor.separar_piezas(trozo)
                 if len(partido) > 1:
                     break
+                gastada = trozo.data
+                trozo.data = respaldo.copy()
+                bpy.data.meshes.remove(gastada)
+            bpy.data.meshes.remove(respaldo)
             if len(partido) < 2:
                 hechas.append(trozo)      # no hay por donde partirla mas
                 continue
@@ -280,12 +311,22 @@ class Trabajo:
                 f"{nombre}: quedan {quedan} aristas sin cerrar de {abiertas} "
                 "que habia; la malla de partida esta rota ahi")
 
-        # --- las marcas ------------------------------------------------------
+        # --- quien va con quien, y las marcas --------------------------------
+        yield ("mirando que pieza va con cada cual", 0.92)
+        marcos = {}
+        for pieza in self.resultado.piezas:
+            marco = marcas.marco_interior(pieza.objeto, self.centro)
+            if marco is not None:
+                marcos[pieza.objeto.name] = marco
+        self.resultado.vecinos = marcas.vecindario(self.resultado.piezas, marcos)
+
         if ajustes.marcar and self.resultado.piezas:
-            yield ("grabando las marcas", 0.94)
-            for texto, avance in self._marcar():
+            for texto, avance in self._marcar(marcos):
                 yield (texto, avance)
 
+        global ULTIMO
+        self.resultado.figura = self.objeto.name
+        ULTIMO = self.resultado
         self.objeto.hide_set(True)
         self._resumir()
         yield ("listo", 1.0)
@@ -297,28 +338,23 @@ class Trabajo:
                 math.hypot(centro.x - self.eje.x, centro.y - self.eje.y),
                 centro.z)
 
-    def _marcar(self):
+    def _marcar(self, marcos):
         """Graba en cada pieza su nombre y el de las que van pegadas a ella."""
         piezas = self.resultado.piezas
-        marcos = {}
-        for pieza in piezas:
-            marco = marcas.marco_interior(pieza.objeto, self.centro)
-            if marco is not None:
-                marcos[pieza.objeto.name] = marco
-        vecinos = marcas.vecindario(piezas, marcos)
         hechas = 0
         for n, pieza in enumerate(piezas):
             nombre = pieza.objeto.name
             if nombre not in marcos:
                 continue
-            if marcas.marcar(pieza.objeto, self.centro, nombre.replace("-", "/"),
-                             {lado: quien.replace("-", "/")
-                              for lado, quien in vecinos.get(nombre, {}).items()},
+            vecinas = {lado: quien.replace("-", "/") for lado, quien
+                       in self.resultado.vecinos.get(nombre, {}).items()}
+            if marcas.marcar(pieza.objeto, self.centro,
+                             nombre.replace("-", "/"), vecinas,
                              self.ajustes.hondo):
                 hechas += 1
             if n % 10 == 0:
                 yield (f"grabando marcas ({n + 1}/{len(piezas)})",
-                       0.94 + 0.05 * n / max(len(piezas), 1))
+                       0.92 + 0.07 * n / max(len(piezas), 1))
         sin = len(piezas) - hechas
         if sin:
             self.resultado.avisos.append(
@@ -326,6 +362,7 @@ class Trabajo:
                 "suficiente o el grabado habria roto la pieza.")
 
     def _resumir(self) -> None:
+        """Los avisos que hay que dar al acabar, en lenguaje de taller."""
         res = self.resultado
         if res.no_caben:
             nombres = ", ".join(p.nombre for p in res.no_caben[:6])

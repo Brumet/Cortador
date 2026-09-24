@@ -74,6 +74,8 @@ class Piso:
     z1: float
     radio: float = 0.0
     gajos: int = 1
+    #: cuantas piezas se calcula que va a dar este piso
+    piezas: int = 1
 
     @property
     def alto(self) -> float:
@@ -288,10 +290,13 @@ def planta(puntos, perfil: Perfil) -> Tuple[float, float, bool, float]:
 
 
 def gajos_medidos(puntos, eje: Vector, perfil: Perfil, giro: float,
-                  tope: int = 0) -> int:
-    """Los cortes radiales que hacen falta, midiendo los gajos de verdad."""
+                  tope: int = 0) -> Tuple[int, int]:
+    """Los cortes radiales que hacen falta, midiendo los gajos de verdad.
+
+    Devuelve cuantos cortes y cuantas piezas se calcula que van a salir.
+    """
     if len(puntos) == 0:
-        return 0
+        return (0, 0)
     if len(puntos) > MUESTRA:
         puntos = puntos[::max(1, len(puntos) // MUESTRA)]
     dx = puntos[:, 0] - eje.x
@@ -306,7 +311,7 @@ def gajos_medidos(puntos, eje: Vector, perfil: Perfil, giro: float,
             mejor, cuantas = g, piezas
         if piezas == 2 * g:
             break        # ya cabe entero, mas cortes solo anaden juntas
-    return mejor
+    return (mejor, cuantas or 1)
 
 
 def pisos(objeto: bpy.types.Object, ajustes: Ajustes) -> List[Piso]:
@@ -338,11 +343,13 @@ def pisos(objeto: bpy.types.Object, ajustes: Ajustes) -> List[Piso]:
                                         dentro[:, 1] - eje.y).max())
         if ajustes.gajos < 0:
             piso.gajos = 0          # el usuario pidio dejar los pisos enteros
+            piso.piezas = 1
         elif ajustes.gajos > 0:
             piso.gajos = ajustes.gajos
+            piso.piezas = 2 * piso.gajos
         else:
-            piso.gajos = gajos_medidos(dentro, eje, ajustes.perfil,
-                                       ajustes.giro)
+            piso.gajos, piso.piezas = gajos_medidos(
+                dentro, eje, ajustes.perfil, ajustes.giro)
         salida.append(piso)
     return salida
 

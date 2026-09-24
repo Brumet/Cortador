@@ -30,6 +30,9 @@ El espesor y la escala los pones tú, que para eso los ves:
    con nombres del tipo `P2-L5`: piso 2, lámina 5. Las láminas se numeran
    dando la vuelta al piso, así que la L4 siempre está entre la L3 y la L5.
 5. Elige carpeta y pulsa **Guardar los STL**.
+6. Y **Hacer el plano (PDF)**: una hoja por piso con el render del piso armado,
+   cada pieza señalada con su nombre y una tabla de qué va pegado con qué.
+   Se lo pasas al área de producción y lo abren en la tablet o lo imprimen.
 
 ## Las marcas
 
@@ -47,6 +50,21 @@ Así una pieza suelta encima de la mesa ya dice dónde va y por dónde sigue,
 sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
 montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
 hueca es una tira de tres milímetros donde no cabe ni una letra.
+
+## El plano de montaje
+
+El PDF lleva una portada con los datos de la figura y cómo leer las marcas, y
+después una hoja por piso:
+
+* el piso armado, visto desde arriba, con cada pieza señalada con su nombre;
+* una tabla con las medidas de cada pieza y qué pieza lleva a la izquierda, a
+  la derecha, arriba y abajo.
+
+Los renders los hace Workbench, el mismo motor con el que Blender te dibuja el
+modelo mientras trabajas: un segundo por hoja en vez de los minutos de un
+render de verdad, y para esto se ve igual de bien. El PDF se escribe a mano,
+sin librerías: Blender no trae ninguna y no se le pueden instalar, así que el
+complemento funciona con lo que hay dentro.
 
 ## Qué hace por dentro
 
@@ -74,15 +92,25 @@ las que saldrían con la cuenta de siempre.
 
 ## Lo medido
 
-Sobre modelos hechos con Solidificar, en Blender 5.0:
+Sobre modelos hechos con Solidificar, en Blender 5.0, cortando para una FLSUN
+V400:
 
-| modelo | caras | piezas | cerradas | volumen |
-|---|---|---|---|---|
-| esfera de 1,2 m | 4.096 | 108 | 108 / 108 | exacto |
-| toro de 900 mm | 6.144 | 26 | 26 / 26 | exacto |
-| Suzanne de 1,5 m | 15.912 | 98 | 98 / 98 | −0,01 % |
-| Suzanne de 1,5 m fina | 252.576 | 109 | 109 / 109 | exacto |
-| cono de 700 mm | 130 | 26 | 26 / 26 | exacto |
+| modelo | caras | piezas | cerradas | caben | material |
+|---|---|---|---|---|---|
+| esfera de 1,2 m | 4.096 | 116 | 116 / 116 | 116 / 116 | exacto |
+| toro de 900 mm | 6.144 | 24 | 24 / 24 | 24 / 24 | exacto |
+| Suzanne de 1,5 m | 15.912 | 80 | 80 / 80 | 80 / 80 | exacto |
+| Suzanne de 1,5 m fina | 252.576 | 80 | 80 / 80 | 80 / 80 | exacto |
+| cono de 700 mm | 130 | 26 | 26 / 26 | 26 / 26 | exacto |
 
-Un modelo de resina de 5,2 millones de triángulos se corta entero en unos
-tres minutos y medio con un pico de 5 GB de memoria.
+«Material exacto» quiere decir que el volumen de la suma de las piezas
+coincide con el del modelo entero: ni se pierde ni se inventa nada por el
+camino.
+
+Un modelo de resina de 5,2 millones de triángulos se corta entero en unos tres
+minutos y medio con un pico de 5 GB de memoria.
+
+Donde todavía se le ven las costuras es en las figuras con tapas planas muy
+grandes: un cilindro macizo de 2 × 2 m sale en 600 piezas, todas cerradas y
+todas caben, pero pierde un 6 % de material rematando esquirlas. Una figura de
+verdad no se parece a eso.

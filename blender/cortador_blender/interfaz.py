@@ -25,7 +25,7 @@ from bpy.props import (BoolProperty, EnumProperty, FloatProperty, IntProperty,
                        PointerProperty, StringProperty)
 from bpy.types import Operator, Panel, PropertyGroup
 
-from . import perfiles, plan, proceso
+from . import perfiles, plan, plano, proceso
 from .plan import Ajustes
 
 
@@ -151,15 +151,14 @@ class CORTADOR_OT_analizar(Operator):
         ajustes = _ajustes(contexto)
         mm = milimetros_por_unidad(contexto.scene)
         pisos = plan.pisos(objeto, ajustes)
-        piezas = sum(max(2 * p.gajos, 1) for p in pisos)
-        lineas = [f"{len(pisos)} pisos, {piezas} piezas"]
+        piezas = sum(max(p.piezas, 1) for p in pisos)
+        lineas = [f"{len(pisos)} pisos, unas {piezas} piezas"]
         for piso in pisos:
-            ancho, fondo = plan.medida_gajo(piso.radio, max(piso.gajos, 1),
-                                            ajustes.pared)
+            sobra = max(piso.piezas - 2 * piso.gajos, 0)
             lineas.append(
                 f"piso {piso.indice + 1}: {piso.alto * mm:.0f} mm de alto, "
-                f"{max(2 * piso.gajos, 1)} gajos de {ancho * mm:.0f} x "
-                f"{fondo * mm:.0f} mm")
+                f"{max(2 * piso.gajos, 1)} gajos"
+                + (f" y {sobra} cortes mas para que quepan" if sobra else ""))
         contexto.scene.cortador_informe = "\n".join(lineas)
         self.report({"INFO"}, lineas[0])
         return {"FINISHED"}
@@ -279,6 +278,38 @@ class CORTADOR_OT_exportar(Operator):
         return {"FINISHED"}
 
 
+class CORTADOR_OT_plano(Operator):
+    """Dibuja el plano de montaje en PDF, con un render de cada piso"""
+
+    bl_idname = "cortador.plano"
+    bl_label = "Hacer el plano (PDF)"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, contexto):
+        return proceso.vigente() is not None
+
+    def execute(self, contexto):
+        resultado = proceso.vigente()
+        if resultado is None:
+            self.report({"ERROR"}, "Corta la figura primero")
+            return {"CANCELLED"}
+        carpeta = bpy.path.abspath(contexto.scene.cortador.carpeta or "//")
+        if not carpeta or not os.path.isdir(carpeta):
+            self.report({"ERROR"}, "Elige una carpeta que exista")
+            return {"CANCELLED"}
+        ruta = os.path.join(carpeta, "plan-de-montaje.pdf")
+        try:
+            plano.montar(resultado, _ajustes(contexto),
+                         milimetros_por_unidad(contexto.scene), ruta,
+                         resultado.figura)
+        except Exception as fallo:
+            self.report({"ERROR"}, f"No se pudo hacer el plano: {fallo}")
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"Plano guardado en {ruta}")
+        return {"FINISHED"}
+
+
 class CORTADOR_PT_panel(Panel):
     bl_label = "Cortador"
     bl_idname = "CORTADOR_PT_panel"
@@ -338,10 +369,11 @@ class CORTADOR_PT_panel(Panel):
         trazo.separator()
         trazo.prop(datos, "carpeta")
         trazo.operator("cortador.exportar", icon="EXPORT")
+        trazo.operator("cortador.plano", icon="FILE_IMAGE")
 
 
 CLASES = (CortadorAjustes, CORTADOR_OT_analizar, CORTADOR_OT_cortar,
-          CORTADOR_OT_exportar, CORTADOR_PT_panel)
+          CORTADOR_OT_exportar, CORTADOR_OT_plano, CORTADOR_PT_panel)
 
 
 def registrar() -> None:
