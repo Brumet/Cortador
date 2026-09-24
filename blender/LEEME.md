@@ -55,6 +55,29 @@ sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
 montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
 hueca es una tira de tres milímetros donde no cabe ni una letra.
 
+## El registro
+
+Todo lo que hace el complemento queda apuntado: qué se cortó, cuánto tardó
+cada paso, cuánta memoria gastó, cómo venía la malla de partida y cómo quedó
+cada pieza. Si algo falla, el error entero con su traza va ahí también.
+
+En el panel, abajo del todo, se ven las últimas líneas y hay dos botones:
+
+* **Copiar el registro** — al portapapeles, para pegarlo en un mensaje.
+* **Guardar el registro** — un `.txt` en la carpeta que hayas elegido.
+
+También queda dentro del archivo de Blender, en el Editor de texto, como
+`Cortador · registro`.
+
+La lupa de al lado (**Revisar la figura**) apunta el estado de la malla sin
+cortar nada: medidas en milímetros, si está cerrada, si tiene caras encima de
+caras, y con qué ajustes ibas a cortar. Es lo primero que conviene mirar
+cuando el resultado no es el que esperabas, porque casi siempre el problema
+está ahí y no en el corte.
+
+No se apunta ni el nombre del archivo ni las rutas de tu máquina: versión de
+Blender, sistema, tamaño del modelo y ajustes, y nada más.
+
 ## El plano de montaje
 
 El PDF lleva una portada con los datos de la figura y cómo leer las marcas, y

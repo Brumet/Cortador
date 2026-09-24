@@ -12,13 +12,17 @@ El reparto de archivos:
     plan.py      donde van los cortes, contra la capacidad de la maquina
     perfiles.py  las maquinas conocidas
     proceso.py   el trabajo completo, en pasos
+    marcas.py    grabar en cada pieza como se llama y con quien va
+    plano.py     el plano de montaje en PDF
+    pdf.py       un escritor de PDF de andar por casa
+    registro.py  el diario: todo lo que pasa, apuntado para poder mandarlo
     interfaz.py  el panel y los botones
 """
 
 bl_info = {
     "name": "Cortador",
     "author": "Brumet",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (3, 6, 0),
     "location": "Vista 3D > barra lateral (N) > Cortador",
     "description": "Corta figuras grandes en piezas que caben en la impresora",

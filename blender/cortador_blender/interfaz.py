@@ -17,6 +17,7 @@ Dos decisiones de fondo:
 
 from __future__ import annotations
 
+import datetime
 import os
 from typing import Optional
 
@@ -25,7 +26,7 @@ from bpy.props import (BoolProperty, EnumProperty, FloatProperty, IntProperty,
                        PointerProperty, StringProperty)
 from bpy.types import Operator, Panel, PropertyGroup
 
-from . import perfiles, plan, plano, proceso
+from . import perfiles, plan, plano, proceso, registro
 from .plan import Ajustes
 
 
@@ -189,7 +190,16 @@ class CORTADOR_OT_cortar(Operator):
             return {"CANCELLED"}
         if objeto.mode != "OBJECT":
             bpy.ops.object.mode_set(mode="OBJECT")
-        self._trabajo = proceso.Trabajo(objeto, _ajustes(contexto))
+        ajustes = _ajustes(contexto)
+        mm = milimetros_por_unidad(contexto.scene)
+        diario = registro.DIARIO
+        diario.nuevo("corte")
+        registro.de_la_escena(contexto.scene, mm)
+        diario.titulo("La figura")
+        registro.de_la_figura(objeto, mm)
+        diario.titulo("Ajustes")
+        registro.de_los_ajustes(contexto.scene.cortador, ajustes, mm)
+        self._trabajo = proceso.Trabajo(objeto, ajustes)
         self._pasos = self._trabajo.pasos()
         contexto.window_manager.progress_begin(0.0, 1.0)
         self._reloj = contexto.window_manager.event_timer_add(
@@ -207,7 +217,11 @@ class CORTADOR_OT_cortar(Operator):
         except StopIteration:
             return self._acabar(contexto, {"FINISHED"}, contar=True)
         except Exception as fallo:            # el corte fallo de verdad
-            self.report({"ERROR"}, f"El corte fallo: {fallo}")
+            registro.DIARIO.fallo(fallo)
+            registro.DIARIO.al_bloque()
+            self.report({"ERROR"},
+                        f"El corte fallo: {fallo}. Esta apuntado en el "
+                        "registro: guardalo y mandalo.")
             return self._acabar(contexto, {"CANCELLED"})
         contexto.window_manager.progress_update(avance)
         contexto.workspace.status_text_set(f"Cortador: {texto}")
@@ -222,6 +236,8 @@ class CORTADOR_OT_cortar(Operator):
         contexto.workspace.status_text_set(None)
         if contar and self._trabajo is not None:
             res = self._trabajo.resultado
+            registro.del_resultado(res, milimetros_por_unidad(contexto.scene))
+            registro.DIARIO.al_bloque()
             contexto.scene.cortador_informe = _contar(res)
             self.report({"INFO"}, f"{len(res.piezas)} piezas")
             for aviso in res.avisos:
@@ -262,14 +278,21 @@ class CORTADOR_OT_exportar(Operator):
             self.report({"ERROR"}, "No hay piezas que guardar")
             return {"CANCELLED"}
         antes = [o for o in contexto.selected_objects]
-        for pieza in piezas:
-            for otro in contexto.selected_objects:
-                otro.select_set(False)
-            pieza.select_set(True)
-            contexto.view_layer.objects.active = pieza
-            bpy.ops.wm.stl_export(
-                filepath=os.path.join(carpeta, f"{pieza.name}.stl"),
-                export_selected_objects=True, ascii_format=False)
+        try:
+            for pieza in piezas:
+                for otro in contexto.selected_objects:
+                    otro.select_set(False)
+                pieza.select_set(True)
+                contexto.view_layer.objects.active = pieza
+                bpy.ops.wm.stl_export(
+                    filepath=os.path.join(carpeta, f"{pieza.name}.stl"),
+                    export_selected_objects=True, ascii_format=False)
+        except Exception as fallo:
+            registro.DIARIO.fallo(fallo)
+            registro.DIARIO.al_bloque()
+            self.report({"ERROR"}, f"Fallo al guardar: {fallo}")
+            return {"CANCELLED"}
+        registro.DIARIO.linea(f"guardados {len(piezas)} STL")
         for otro in contexto.selected_objects:
             otro.select_set(False)
         for otro in antes:
@@ -304,9 +327,79 @@ class CORTADOR_OT_plano(Operator):
                          milimetros_por_unidad(contexto.scene), ruta,
                          resultado.figura)
         except Exception as fallo:
+            registro.DIARIO.fallo(fallo)
+            registro.DIARIO.al_bloque()
             self.report({"ERROR"}, f"No se pudo hacer el plano: {fallo}")
             return {"CANCELLED"}
+        registro.DIARIO.linea(f"plano guardado en {os.path.basename(ruta)}")
         self.report({"INFO"}, f"Plano guardado en {ruta}")
+        return {"FINISHED"}
+
+
+class CORTADOR_OT_registro_copiar(Operator):
+    """Copia el registro al portapapeles, listo para pegarlo donde haga falta"""
+
+    bl_idname = "cortador.registro_copiar"
+    bl_label = "Copiar el registro"
+    bl_options = {"REGISTER"}
+
+    def execute(self, contexto):
+        cuantas = registro.DIARIO.al_portapapeles()
+        registro.DIARIO.al_bloque()
+        self.report({"INFO"}, f"{cuantas} lineas copiadas. Pegalo donde quieras")
+        return {"FINISHED"}
+
+
+class CORTADOR_OT_registro_guardar(Operator):
+    """Guarda el registro en un archivo de texto para poder mandarlo"""
+
+    bl_idname = "cortador.registro_guardar"
+    bl_label = "Guardar el registro"
+    bl_options = {"REGISTER"}
+
+    def execute(self, contexto):
+        carpeta = bpy.path.abspath(contexto.scene.cortador.carpeta or "//")
+        if not carpeta or not os.path.isdir(carpeta):
+            self.report({"ERROR"}, "Elige antes una carpeta que exista")
+            return {"CANCELLED"}
+        marca = datetime.datetime.now().strftime("%Y%m%d-%H%M")
+        ruta = os.path.join(carpeta, f"cortador-registro-{marca}.txt")
+        try:
+            registro.DIARIO.guardar(ruta)
+        except Exception as fallo:
+            self.report({"ERROR"}, f"No se pudo guardar: {fallo}")
+            return {"CANCELLED"}
+        registro.DIARIO.al_bloque()
+        self.report({"INFO"}, f"Registro guardado en {ruta}")
+        return {"FINISHED"}
+
+
+class CORTADOR_OT_registro_revisar(Operator):
+    """Revisa la figura y apunta como esta, sin cortar nada"""
+
+    bl_idname = "cortador.registro_revisar"
+    bl_label = "Revisar la figura"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, contexto):
+        return _figura(contexto) is not None
+
+    def execute(self, contexto):
+        objeto = _figura(contexto)
+        mm = milimetros_por_unidad(contexto.scene)
+        diario = registro.DIARIO
+        diario.nuevo("revision")
+        registro.de_la_escena(contexto.scene, mm)
+        diario.titulo("La figura")
+        try:
+            registro.de_la_figura(objeto, mm)
+            diario.titulo("Ajustes")
+            registro.de_los_ajustes(contexto.scene.cortador, _ajustes(contexto), mm)
+        except Exception as fallo:
+            diario.fallo(fallo)
+        diario.al_bloque()
+        self.report({"INFO"}, "Figura revisada; mira el registro en el panel")
         return {"FINISHED"}
 
 
@@ -371,9 +464,25 @@ class CORTADOR_PT_panel(Panel):
         trazo.operator("cortador.exportar", icon="EXPORT")
         trazo.operator("cortador.plano", icon="FILE_IMAGE")
 
+        trazo.separator()
+        caja = trazo.box()
+        fila = caja.row()
+        fila.label(text="Registro", icon="TEXT")
+        fila.operator("cortador.registro_revisar", text="", icon="VIEWZOOM")
+        ultimas = registro.DIARIO.ultimas(8)
+        if not ultimas:
+            caja.label(text="todavia no hay nada apuntado")
+        for linea in ultimas:
+            caja.label(text=linea[:64])
+        fila = caja.row(align=True)
+        fila.operator("cortador.registro_copiar", icon="COPYDOWN")
+        fila.operator("cortador.registro_guardar", icon="FILE_TEXT")
+
 
 CLASES = (CortadorAjustes, CORTADOR_OT_analizar, CORTADOR_OT_cortar,
-          CORTADOR_OT_exportar, CORTADOR_OT_plano, CORTADOR_PT_panel)
+          CORTADOR_OT_exportar, CORTADOR_OT_plano,
+          CORTADOR_OT_registro_copiar, CORTADOR_OT_registro_guardar,
+          CORTADOR_OT_registro_revisar, CORTADOR_PT_panel)
 
 
 def registrar() -> None:

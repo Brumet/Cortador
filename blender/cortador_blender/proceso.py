@@ -15,6 +15,7 @@ parece colgado.
 from __future__ import annotations
 
 import math
+import time
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Tuple
@@ -24,6 +25,7 @@ from mathutils import Vector
 
 from . import cortar as motor
 from . import marcas
+from . import registro
 from . import plan
 from .plan import Ajustes, Piso
 
@@ -223,8 +225,15 @@ class Trabajo:
 
     def pasos(self) -> Iterator[Tuple[str, float]]:
         ajustes = self.ajustes
-        pisos = plan.pisos(self.objeto, ajustes)
+        diario = registro.DIARIO
+        diario.titulo("Corte")
+        with diario.paso("plan de pisos y gajos"):
+            pisos = plan.pisos(self.objeto, ajustes)
         self.resultado.pisos = pisos
+        for piso in pisos:
+            diario.dato(f"piso {piso.indice + 1}",
+                        f"alto {piso.alto:.1f}, radio {piso.radio:.1f}, "
+                        f"{2 * piso.gajos} gajos, {piso.piezas} piezas previstas")
         yield (f"{len(pisos)} pisos, "
                f"{sum(2 * p.gajos for p in pisos)} piezas previstas", 0.02)
 
@@ -238,8 +247,11 @@ class Trabajo:
         trozos = [copia]
         if len(pisos) > 1:
             yield ("cortando los pisos", 0.05)
-            motor.cortar_objeto(copia, plan.planos_de_seccion(pisos))
-            trozos = motor.separar_piezas(copia)
+            with diario.paso(f"cortar {len(pisos) - 1} planos de piso "
+                             f"({len(copia.data.polygons)} caras)"):
+                motor.cortar_objeto(copia, plan.planos_de_seccion(pisos))
+                trozos = motor.separar_piezas(copia)
+            diario.dato("trozos tras los pisos", len(trozos))
             yield (f"{len(trozos)} trozos tras los pisos", 0.35)
 
         por_piso: Dict[int, List[bpy.types.Object]] = {}
@@ -257,23 +269,28 @@ class Trabajo:
             yield (f"piso {piso.indice + 1}: {2 * piso.gajos} gajos", avance)
             planos = plan.planos_de_gajo(self.eje, piso.gajos,
                                          ajustes.giro, piso.indice)
-            for trozo in suyos:
-                motor.cortar_objeto(trozo, planos)
-                for pieza in motor.separar_piezas(trozo):
-                    finales.append((pieza, piso.indice,
-                                    _que_gajo(pieza, self.eje, piso.gajos,
-                                              ajustes.giro)))
+            with diario.paso(f"piso {piso.indice + 1}: {2 * piso.gajos} gajos "
+                             f"sobre {len(suyos)} trozos"):
+                for trozo in suyos:
+                    motor.cortar_objeto(trozo, planos)
+                    for pieza in motor.separar_piezas(trozo):
+                        finales.append((pieza, piso.indice,
+                                        _que_gajo(pieza, self.eje, piso.gajos,
+                                                  ajustes.giro)))
 
         # --- tercera vuelta: apretar lo que todavia no quepa ----------------
         yield ("ajustando las piezas que se pasan", 0.85)
-        apretadas: List[Tuple[bpy.types.Object, int, int]] = []
-        for objeto, piso, gajo in finales:
-            for trozo in _apretar(objeto, ajustes.perfil):
-                apretadas.append((trozo, piso, gajo))
+        with diario.paso(f"ajustar las que no caben (de {len(finales)} piezas)"):
+            apretadas: List[Tuple[bpy.types.Object, int, int]] = []
+            for objeto, piso, gajo in finales:
+                for trozo in _apretar(objeto, ajustes.perfil):
+                    apretadas.append((trozo, piso, gajo))
+        diario.dato("piezas tras el ajuste", len(apretadas))
         finales = apretadas
 
         # --- rematar, medir y bautizar -------------------------------------
         yield ("cerrando y midiendo las piezas", 0.88)
+        reloj = time.perf_counter()
         perfil = ajustes.perfil
         vivas: List[Tuple[bpy.types.Object, int, int]] = []
         rotas: Dict[str, Tuple[int, int]] = {}
@@ -306,6 +323,9 @@ class Trabajo:
             pieza.cerrada = objeto.name not in rotas
             pieza.cabe = entra and alto <= perfil.alto_util()
             self.resultado.piezas.append(pieza)
+        diario.linea(f"cerrar y medir {len(vivas)} piezas: "
+                     f"{time.perf_counter() - reloj:.1f} s, "
+                     f"{len(rotas)} con aristas sin cerrar")
         for nombre, (abiertas, quedan) in rotas.items():
             self.resultado.avisos.append(
                 f"{nombre}: quedan {quedan} aristas sin cerrar de {abiertas} "
@@ -313,16 +333,23 @@ class Trabajo:
 
         # --- quien va con quien, y las marcas --------------------------------
         yield ("mirando que pieza va con cada cual", 0.92)
-        marcos = {}
-        for pieza in self.resultado.piezas:
-            marco = marcas.marco_interior(pieza.objeto, self.centro)
-            if marco is not None:
-                marcos[pieza.objeto.name] = marco
-        self.resultado.vecinos = marcas.vecindario(self.resultado.piezas, marcos)
+        with diario.paso("buscar vecinas"):
+            marcos = {}
+            for pieza in self.resultado.piezas:
+                marco = marcas.marco_interior(pieza.objeto, self.centro)
+                if marco is not None:
+                    marcos[pieza.objeto.name] = marco
+            self.resultado.vecinos = marcas.vecindario(self.resultado.piezas,
+                                                       marcos)
+        diario.dato("piezas sin cara interior",
+                    len(self.resultado.piezas) - len(marcos))
 
         if ajustes.marcar and self.resultado.piezas:
+            reloj = time.perf_counter()
             for texto, avance in self._marcar(marcos):
                 yield (texto, avance)
+            diario.linea(f"grabar las marcas: "
+                         f"{time.perf_counter() - reloj:.1f} s")
 
         global ULTIMO
         self.resultado.figura = self.objeto.name

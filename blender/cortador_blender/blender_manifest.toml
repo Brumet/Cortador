@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "cortador_blender"
-version = "0.1.0"
+version = "0.2.0"
 name = "Cortador"
 tagline = "Corta figuras grandes en piezas que caben en la impresora"
 maintainer = "Brumet <brumet.3d@gmail.com>"
