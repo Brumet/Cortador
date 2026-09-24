@@ -656,6 +656,13 @@ def cortar(bm: bmesh.types.BMesh, planos: Sequence[Plano], avisar=None,
             bm, {v for e in bordes.values() if e.is_valid for v in e.verts},
             capa, lado)
 
+    # Y fuera las aristas y los vertices que no sostienen ninguna cara. Son
+    # basura que deja el rasgado, pero no son inofensivos: `separar por trozos
+    # sueltos` los cuenta como union, asi que una sola arista suelta entre dos
+    # piezas ya cortadas hace que salgan como una. En la cupula de la esfera de
+    # prueba, doce aristas asi mantenian pegados cuatro trozos.
+    _limpiar(bm)
+
     # Aqui **no** se cose nada de lo que quede abierto, y es a proposito.
     # Coser junta los dos labios del corte, y en un sitio donde el corte salio
     # sin area eso vuelve a pegar las dos piezas: se corta la figura y sale

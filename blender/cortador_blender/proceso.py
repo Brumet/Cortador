@@ -15,6 +15,7 @@ parece colgado.
 from __future__ import annotations
 
 import math
+import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Tuple
 
@@ -103,6 +104,41 @@ def _que_gajo(objeto: bpy.types.Object, eje: Vector, cuantos: int,
     return int(math.floor((angulo % (2 * math.pi)) / paso)) % (2 * cuantos)
 
 
+def _planos_para_partir(puntos, rumbo: float, alto_util: float
+                        ) -> List[motor.Plano]:
+    """Por donde probar a partir una pieza que no cabe, de mejor a peor.
+
+    El primero es el bueno: perpendicular al lado largo y por la mitad de ese
+    lado. Se mide la mitad del **recorrido**, no el centro de masas, porque una
+    pieza curvada -media corona, el gajo de una cupula- tiene el centro de masas
+    en el aire, fuera del material, y un plano que pase por ahi no corta nada.
+
+    El segundo es para cuando ese falla: cruzado. Una pieza en forma de C no se
+    abre con un solo corte por bien puesto que este. No se prueban mas: cada
+    intento fallido deja su corte hecho en la malla, y encadenar cuatro deja la
+    pieza llena de costuras y de astillas.
+    """
+    centro = Vector(puntos.mean(axis=0))
+    hacia = Vector((math.cos(rumbo), math.sin(rumbo), 0.0))
+    cruz = Vector((-math.sin(rumbo), math.cos(rumbo), 0.0))
+    largo = puntos[:, :2] @ np.array([hacia.x, hacia.y])
+    medio = float(largo.min() + largo.max()) / 2
+    ancho = puntos[:, :2] @ np.array([cruz.x, cruz.y])
+    travieso = float(ancho.min() + ancho.max()) / 2
+
+    def en(direccion, valor):
+        punto = centro - direccion * float(centro.xy.dot(direccion.xy)) + direccion * valor
+        return motor.Plano((punto.x, punto.y, centro.z),
+                           (direccion.x, direccion.y, direccion.z), "apretar", 0)
+
+    salida = [en(hacia, medio), en(cruz, travieso)]
+    if puntos[:, 2].ptp() > alto_util:
+        salida.insert(0, motor.Plano(
+            (centro.x, centro.y, float(puntos[:, 2].min() + puntos[:, 2].max()) / 2),
+            (0.0, 0.0, 1.0), "apretar", 0))
+    return salida
+
+
 def _apretar(objeto: bpy.types.Object, perfil, vueltas: int = 7
              ) -> List[bpy.types.Object]:
     """Parte en dos lo que siga sin caber, y vuelve a mirar.
@@ -120,29 +156,18 @@ def _apretar(objeto: bpy.types.Object, perfil, vueltas: int = 7
         siguientes = []
         for trozo in pendientes:
             puntos = plan.nube(trozo)
+            if not len(puntos):
+                continue
             ancho, fondo, entra, rumbo = plan.planta(puntos, perfil)
-            alto = float(puntos[:, 2].ptp()) if len(puntos) else 0.0
-            if entra and alto <= perfil.alto_util():
+            if entra and puntos[:, 2].ptp() <= perfil.alto_util():
                 hechas.append(trozo)
                 continue
-            centro = Vector(puntos.mean(axis=0)) if len(puntos) else Vector()
-            if alto > perfil.alto_util():
-                corte = motor.Plano(tuple(centro), (0.0, 0.0, 1.0), "apretar", 0)
-            else:
-                corte = motor.Plano(tuple(centro),
-                                    (math.cos(rumbo), math.sin(rumbo), 0.0),
-                                    "apretar", 0)
-            motor.cortar_objeto(trozo, [corte])
-            partido = motor.separar_piezas(trozo)
-            if len(partido) < 2:
-                # Una pieza en anillo no se abre con un solo corte: queda en
-                # forma de C. Con el corte cruzado si se abre, y se hace aqui
-                # mismo en vez de dejarlo para la vuelta siguiente para no
-                # llenarla de cortes de mas.
-                motor.cortar_objeto(trozo, [motor.Plano(
-                    tuple(centro),
-                    (-math.sin(rumbo), math.cos(rumbo), 0.0), "apretar", 1)])
+            partido = [trozo]
+            for corte in _planos_para_partir(puntos, rumbo, perfil.alto_util()):
+                motor.cortar_objeto(trozo, [corte])
                 partido = motor.separar_piezas(trozo)
+                if len(partido) > 1:
+                    break
             if len(partido) < 2:
                 hechas.append(trozo)      # no hay por donde partirla mas
                 continue
