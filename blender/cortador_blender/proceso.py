@@ -101,6 +101,18 @@ def _mudar(objeto: bpy.types.Object, coleccion: bpy.types.Collection) -> None:
     coleccion.objects.link(objeto)
 
 
+def _es_esquirla(objeto: bpy.types.Object, minimo: float) -> bool:
+    """Si la pieza es una miga del corte y no vale la pena ni contarla.
+
+    Un escaneo trae casi siempre basura suelta -motas de un milimetro que el
+    escaner metio y nadie vio-, y al cortar cada mota sale como pieza. Mil
+    migas no estorban solo en la lista: cada una se cierra, se mide, se busca
+    a sus vecinas y se intenta grabar, y eso es lo que convierte un corte de
+    dos minutos en uno de media hora. Se tiran aqui, y se dice cuantas.
+    """
+    return max(objeto.dimensions) < minimo
+
+
 def _centro(objeto: bpy.types.Object) -> Vector:
     puntos = [objeto.matrix_world @ Vector(v) for v in objeto.bound_box]
     return sum(puntos, Vector()) / len(puntos)
@@ -162,8 +174,8 @@ def _planos_para_partir(puntos, rumbo: float, alto_util: float
     return salida
 
 
-def _apretar(objeto: bpy.types.Object, perfil, vueltas: int = 7
-             ) -> List[bpy.types.Object]:
+def _apretar(objeto: bpy.types.Object, perfil, avance: float = 0.0,
+             vueltas: int = 7):
     """Parte en dos lo que siga sin caber, y vuelve a mirar.
 
     Los gajos resuelven casi todo, pero no todo: la tapa plana de un cilindro
@@ -175,9 +187,14 @@ def _apretar(objeto: bpy.types.Object, perfil, vueltas: int = 7
     """
     pendientes = [objeto]
     hechas: List[bpy.types.Object] = []
-    for _ in range(vueltas):
+    for vuelta in range(vueltas):
         siguientes = []
-        for trozo in pendientes:
+        for cual, trozo in enumerate(pendientes, 1):
+            # Se avisa antes de cada corte y no solo al empezar la pieza: una
+            # pieza de un millon de caras tarda sus segundos en cada vuelta, y
+            # sin este aviso la ventana se queda quieta sin decir por que.
+            yield (f"ajustando {objeto.name}: vuelta {vuelta + 1}, "
+                   f"trozo {cual} de {len(pendientes)}", avance)
             puntos = plan.nube(trozo)
             if not len(puntos):
                 continue
@@ -246,10 +263,17 @@ class Trabajo:
         # --- primera vuelta: los pisos -------------------------------------
         trozos = [copia]
         if len(pisos) > 1:
-            yield ("cortando los pisos", 0.05)
+            caras = len(copia.data.polygons)
+            yield (f"cortando los pisos ({caras} caras)", 0.05)
             with diario.paso(f"cortar {len(pisos) - 1} planos de piso "
-                             f"({len(copia.data.polygons)} caras)"):
-                motor.cortar_objeto(copia, plan.planos_de_seccion(pisos))
+                             f"({caras} caras)"):
+                # plano a plano, avisando entre uno y otro: en una figura
+                # grande cada plano son decenas de segundos y hay que poder
+                # ver que avanza y poder pararlo
+                for hecho, cuantos in motor.objeto_por_pasos(
+                        copia, plan.planos_de_seccion(pisos)):
+                    yield (f"piso {hecho + 1} de {cuantos} cortado",
+                           0.05 + 0.25 * (hecho + 1) / max(cuantos, 1))
                 trozos = motor.separar_piezas(copia)
             diario.dato("trozos tras los pisos", len(trozos))
             yield (f"{len(trozos)} trozos tras los pisos", 0.35)
@@ -260,32 +284,58 @@ class Trabajo:
 
         # --- segunda vuelta: los gajos, piso a piso ------------------------
         finales: List[Tuple[bpy.types.Object, int, int]] = []
+        migas = 0
         for n, piso in enumerate(pisos):
             avance = 0.35 + 0.5 * (n / max(len(pisos), 1))
             suyos = por_piso.get(piso.indice, [])
             if piso.gajos <= 0 or not suyos:
-                finales += [(t, piso.indice, 0) for t in suyos]
+                for trozo in suyos:
+                    if _es_esquirla(trozo, ajustes.minimo):
+                        bpy.data.objects.remove(trozo, do_unlink=True)
+                        migas += 1
+                    else:
+                        finales.append((trozo, piso.indice, 0))
                 continue
             yield (f"piso {piso.indice + 1}: {2 * piso.gajos} gajos", avance)
             planos = plan.planos_de_gajo(self.eje, piso.gajos,
                                          ajustes.giro, piso.indice)
             with diario.paso(f"piso {piso.indice + 1}: {2 * piso.gajos} gajos "
                              f"sobre {len(suyos)} trozos"):
-                for trozo in suyos:
-                    motor.cortar_objeto(trozo, planos)
+                for cual, trozo in enumerate(suyos, 1):
+                    for hecho, cuantos in motor.objeto_por_pasos(trozo, planos):
+                        yield (f"piso {piso.indice + 1}, trozo {cual} de "
+                               f"{len(suyos)}: corte {hecho + 1} de {cuantos}",
+                               avance)
                     for pieza in motor.separar_piezas(trozo):
+                        if _es_esquirla(pieza, ajustes.minimo):
+                            bpy.data.objects.remove(pieza, do_unlink=True)
+                            migas += 1
+                            continue
                         finales.append((pieza, piso.indice,
                                         _que_gajo(pieza, self.eje, piso.gajos,
                                                   ajustes.giro)))
 
         # --- tercera vuelta: apretar lo que todavia no quepa ----------------
         yield ("ajustando las piezas que se pasan", 0.85)
-        with diario.paso(f"ajustar las que no caben (de {len(finales)} piezas)"):
-            apretadas: List[Tuple[bpy.types.Object, int, int]] = []
-            for objeto, piso, gajo in finales:
-                for trozo in _apretar(objeto, ajustes.perfil):
-                    apretadas.append((trozo, piso, gajo))
-        diario.dato("piezas tras el ajuste", len(apretadas))
+        reloj = time.perf_counter()
+        apretadas: List[Tuple[bpy.types.Object, int, int]] = []
+        for cual, (objeto, piso, gajo) in enumerate(finales, 1):
+            avance = 0.80 + 0.05 * cual / max(len(finales), 1)
+            yield (f"ajustando la pieza {cual} de {len(finales)}", avance)
+            for trozo in (yield from _apretar(objeto, ajustes.perfil, avance)):
+                if _es_esquirla(trozo, ajustes.minimo):
+                    bpy.data.objects.remove(trozo, do_unlink=True)
+                    migas += 1
+                    continue
+                apretadas.append((trozo, piso, gajo))
+        diario.linea(f"ajustar las que no caben: "
+                     f"{time.perf_counter() - reloj:.1f} s, "
+                     f"de {len(finales)} a {len(apretadas)} piezas")
+        if migas:
+            diario.dato("migas tiradas", migas)
+            self.resultado.avisos.append(
+                f"{migas} migas mas pequenas que el minimo se tiraron: son "
+                "basura del corte, no piezas.")
         finales = apretadas
 
         # --- rematar, medir y bautizar -------------------------------------
@@ -294,7 +344,10 @@ class Trabajo:
         perfil = ajustes.perfil
         vivas: List[Tuple[bpy.types.Object, int, int]] = []
         rotas: Dict[str, Tuple[int, int]] = {}
-        for objeto, piso, gajo in finales:
+        for cual, (objeto, piso, gajo) in enumerate(finales, 1):
+            if cual % 5 == 1:
+                yield (f"cerrando la pieza {cual} de {len(finales)}",
+                       0.85 + 0.03 * cual / max(len(finales), 1))
             _mudar(objeto, coleccion)
             abiertas, quedan = motor.cerrar_huecos(objeto)
             if not objeto.data.polygons:
@@ -375,13 +428,20 @@ class Trabajo:
                 continue
             vecinas = {lado: quien.replace("-", "/") for lado, quien
                        in self.resultado.vecinos.get(nombre, {}).items()}
-            if marcas.marcar(pieza.objeto, self.centro,
-                             nombre.replace("-", "/"), vecinas,
-                             self.ajustes.hondo):
+            reloj = time.perf_counter()
+            puesta = marcas.marcar(pieza.objeto, self.centro,
+                                   nombre.replace("-", "/"), vecinas,
+                                   self.ajustes.hondo)
+            tardo = time.perf_counter() - reloj
+            if puesta:
                 hechas += 1
-            if n % 10 == 0:
-                yield (f"grabando marcas ({n + 1}/{len(piezas)})",
-                       0.92 + 0.07 * n / max(len(piezas), 1))
+            if tardo > 2.0 or not puesta:
+                registro.DIARIO.linea(
+                    f"marca de {nombre} ({pieza.caras} caras): "
+                    f"{tardo:.1f} s{'' if puesta else ', no se pudo'}")
+            yield (f"grabando la marca {n + 1} de {len(piezas)} "
+                   f"({pieza.caras} caras)",
+                   0.92 + 0.07 * n / max(len(piezas), 1))
         sin = len(piezas) - hechas
         if sin:
             self.resultado.avisos.append(
@@ -398,9 +458,8 @@ class Trabajo:
                 f"{'...' if len(res.no_caben) > 6 else ''}). "
                 "Sube el numero de gajos o de pisos.")
         chicas = [p for p in res.piezas
-                  if max(p.ancho, p.fondo, p.alto) < self.ajustes.minimo]
+                  if max(p.ancho, p.fondo, p.alto) < self.ajustes.minimo * 3]
         if chicas:
             res.avisos.append(
-                f"{len(chicas)} piezas son mas pequenas que "
-                f"{self.ajustes.minimo:g} mm: son esquirlas del corte y "
-                "seguramente no valga la pena imprimirlas.")
+                f"{len(chicas)} piezas son muy pequenas: miralas antes de "
+                "imprimirlas, puede que sean esquirlas del corte.")

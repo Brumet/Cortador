@@ -583,78 +583,84 @@ def _soltar_pajaritas(bm, vertices, capa, lado) -> int:
     return sueltos
 
 
-def cortar(bm: bmesh.types.BMesh, planos: Sequence[Plano], avisar=None,
-           pizca: float = TOL, soldadura: float = 1e-4) -> int:
-    """Corta, rasga y tapa la malla plano por plano. Devuelve las tapas hechas.
+def _un_plano(bm: bmesh.types.BMesh, i: int, puntos, normales,
+              capa, lado, pizca: float) -> int:
+    """Pasa un plano por la malla: corta, rasga y tapa. Devuelve las tapas.
 
-    Al salir, los trozos ya estan sueltos unos de otros y cerrados, todavia
-    dentro del mismo bmesh. Repartirlos en objetos es el paso siguiente.
+    Esta suelto de `cortar` para poder ir plano a plano desde fuera y contarlo
+    por el camino. Un corte de una figura grande son minutos, y sin avisar de
+    en que va, el programa parece colgado y cualquiera lo mata.
     """
+    punto, normal = puntos[i], normales[i]
+    tapadas = 0
+
+    geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+    salida = bmesh.ops.bisect_plane(
+        bm, geom=geom, dist=pizca,
+        plane_co=punto, plane_no=normal,
+        use_snap_center=False, clear_outer=False, clear_inner=False)
+    # El bisect marca tambien donde el plano solo **roza** la malla sin
+    # partirla -los gajos se rozan todos en el eje-. Eso no es un corte:
+    # si se rasga, quedan dos aristas encima la una de la otra que ya no
+    # hay manera de tapar. Un corte de verdad tiene una cara a cada lado.
+    cortadas = []
+    for arista in salida["geom_cut"]:
+        if not isinstance(arista, bmesh.types.BMEdge) or not arista.is_valid:
+            continue
+        if len(arista.link_faces) != 2:
+            continue
+        if (_signo(arista.link_faces[0], punto, normal, i, capa, lado)
+                != _signo(arista.link_faces[1], punto, normal, i, capa, lado)):
+            cortadas.append(arista)
+    if not cortadas:
+        return 0             # el plano no toco la malla
+
+    nuevas = bmesh.ops.split_edges(bm, edges=cortadas)["edges"]
+    bm.edges.index_update()
+    # `split_edges` devuelve tambien las aristas que ya le habiamos dado,
+    # asi que hay que quitar repetidas o la triangulacion protesta.
+    bordes = {}
+    for arista in list(cortadas) + list(nuevas):
+        if isinstance(arista, bmesh.types.BMEdge) and arista.is_valid:
+            bordes[arista.index] = arista
+    # Una arista de largo cero no la puede usar ninguna cara, asi que se
+    # quedaria de borde para siempre y la pieza nunca cerraria. Salen
+    # solas cuando varios planos se cruzan en la misma linea -los gajos,
+    # todos por el eje-, y aqui se derriten antes de tapar.
+    bmesh.ops.dissolve_degenerate(bm, dist=EPS, edges=list(bordes.values()))
+    bordes = {i: e for i, e in bordes.items() if e.is_valid}
+
+    caras = {1: [], -1: []}
+    for arista in bordes.values():
+        if not arista.is_boundary:
+            continue
+        caras[_signo(arista.link_faces[0], punto, normal, i, capa, lado)
+              ].append(arista)
+
+    u, w = _ejes(normal)
+    for signo, sueltas in caras.items():
+        if len(sueltas) < 3:
+            continue
+        for grupo in _por_anidamiento(bm, sueltas, normal):
+            tapadas += _rellenar(bm, grupo, punto, normal, u, w,
+                                 capa, lado, i, signo)
+
+    _soltar_pajaritas(
+        bm, {v for e in bordes.values() if e.is_valid for v in e.verts},
+        capa, lado)
+
+    return tapadas
+
+
+def por_pasos(bm: bmesh.types.BMesh, planos: Sequence[Plano],
+              pizca: float = TOL):
+    """Corta plano a plano, devolviendo el control despues de cada uno."""
     capa = bm.faces.layers.int.get(CAPA) or bm.faces.layers.int.new(CAPA)
     lado = bm.faces.layers.int.get(LADO) or bm.faces.layers.int.new(LADO)
     puntos = [Vector(p.punto) for p in planos]
     normales = [Vector(p.normal).normalized() for p in planos]
-    tapadas = 0
-
     for i in range(len(planos)):
-        if avisar is not None:
-            avisar(i, len(planos))
-        punto, normal = puntos[i], normales[i]
-
-        geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
-        salida = bmesh.ops.bisect_plane(
-            bm, geom=geom, dist=pizca,
-            plane_co=punto, plane_no=normal,
-            use_snap_center=False, clear_outer=False, clear_inner=False)
-        # El bisect marca tambien donde el plano solo **roza** la malla sin
-        # partirla -los gajos se rozan todos en el eje-. Eso no es un corte:
-        # si se rasga, quedan dos aristas encima la una de la otra que ya no
-        # hay manera de tapar. Un corte de verdad tiene una cara a cada lado.
-        cortadas = []
-        for arista in salida["geom_cut"]:
-            if not isinstance(arista, bmesh.types.BMEdge) or not arista.is_valid:
-                continue
-            if len(arista.link_faces) != 2:
-                continue
-            if (_signo(arista.link_faces[0], punto, normal, i, capa, lado)
-                    != _signo(arista.link_faces[1], punto, normal, i, capa, lado)):
-                cortadas.append(arista)
-        if not cortadas:
-            continue
-
-        nuevas = bmesh.ops.split_edges(bm, edges=cortadas)["edges"]
-        bm.edges.index_update()
-        # `split_edges` devuelve tambien las aristas que ya le habiamos dado,
-        # asi que hay que quitar repetidas o la triangulacion protesta.
-        bordes = {}
-        for arista in list(cortadas) + list(nuevas):
-            if isinstance(arista, bmesh.types.BMEdge) and arista.is_valid:
-                bordes[arista.index] = arista
-        # Una arista de largo cero no la puede usar ninguna cara, asi que se
-        # quedaria de borde para siempre y la pieza nunca cerraria. Salen
-        # solas cuando varios planos se cruzan en la misma linea -los gajos,
-        # todos por el eje-, y aqui se derriten antes de tapar.
-        bmesh.ops.dissolve_degenerate(bm, dist=EPS, edges=list(bordes.values()))
-        bordes = {i: e for i, e in bordes.items() if e.is_valid}
-
-        caras = {1: [], -1: []}
-        for arista in bordes.values():
-            if not arista.is_boundary:
-                continue
-            caras[_signo(arista.link_faces[0], punto, normal, i, capa, lado)
-                  ].append(arista)
-
-        u, w = _ejes(normal)
-        for signo, sueltas in caras.items():
-            if len(sueltas) < 3:
-                continue
-            for grupo in _por_anidamiento(bm, sueltas, normal):
-                tapadas += _rellenar(bm, grupo, punto, normal, u, w,
-                                     capa, lado, i, signo)
-
-        _soltar_pajaritas(
-            bm, {v for e in bordes.values() if e.is_valid for v in e.verts},
-            capa, lado)
+        yield i, _un_plano(bm, i, puntos, normales, capa, lado, pizca)
 
     # Y fuera las aristas y los vertices que no sostienen ninguna cara. Son
     # basura que deja el rasgado, pero no son inofensivos: `separar por trozos
@@ -663,12 +669,47 @@ def cortar(bm: bmesh.types.BMesh, planos: Sequence[Plano], avisar=None,
     # prueba, doce aristas asi mantenian pegados cuatro trozos.
     _limpiar(bm)
 
-    # Aqui **no** se cose nada de lo que quede abierto, y es a proposito.
-    # Coser junta los dos labios del corte, y en un sitio donde el corte salio
-    # sin area eso vuelve a pegar las dos piezas: se corta la figura y sale
-    # entera. El remate se hace despues, pieza por pieza y cada una en su
-    # objeto, donde coser ya no puede pegar una con otra.
+
+def cortar(bm: bmesh.types.BMesh, planos: Sequence[Plano], avisar=None,
+           pizca: float = TOL, soldadura: float = 1e-4) -> int:
+    """Corta, rasga y tapa la malla plano por plano. Devuelve las tapas hechas.
+
+    Al salir, los trozos ya estan sueltos unos de otros y cerrados, todavia
+    dentro del mismo bmesh. Repartirlos en objetos es el paso siguiente.
+
+    Aqui **no** se cose nada de lo que quede abierto, y es a proposito. Coser
+    junta los dos labios del corte, y en un sitio donde el corte salio sin area
+    eso vuelve a pegar las dos piezas: se corta la figura y sale entera. El
+    remate se hace despues, pieza por pieza y cada una en su objeto, donde
+    coser ya no puede pegar una con otra.
+    """
+    tapadas = 0
+    for i, hechas in por_pasos(bm, planos, pizca):
+        if avisar is not None:
+            avisar(i, len(planos))
+        tapadas += hechas
     return tapadas
+
+
+def objeto_por_pasos(objeto: bpy.types.Object, planos: Sequence[Plano]):
+    """Corta un objeto plano a plano, devolviendo el control entre plano y plano.
+
+    Todo pasa dentro de un solo bmesh: pasar una malla de millones de caras a
+    bmesh y devolverla cuesta mas que el corte en si, asi que se hace una vez
+    al principio y otra al final, y entremedias se va cortando.
+    """
+    malla = objeto.data
+    diagonal = Vector(objeto.dimensions).length or 1.0
+    bm = bmesh.new()
+    bm.from_mesh(malla)
+    try:
+        for i, _ in por_pasos(bm, planos):
+            yield i, len(planos)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(malla)
+    finally:
+        bm.free()
+    malla.update()
 
 
 def cortar_objeto(objeto: bpy.types.Object,

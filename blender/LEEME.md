@@ -55,6 +55,23 @@ sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
 montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
 hueca es una tira de tres milímetros donde no cabe ni una letra.
 
+## Si parece que se quedó pegado
+
+El corte de una figura grande son minutos, y Blender no redibuja la ventana
+mientras trabaja. Para que no parezca muerto, el trabajo va en pasos cortos y
+la barra de abajo dice en cuál va: «piso 2 de 4 cortado», «ajustando la pieza
+17 de 43», «grabando la marca 5 de 28». Si esa línea cambia, está vivo.
+
+* **Esc** lo para, y queda apuntado en el registro dónde se paró.
+* En Windows, **Ventana → Alternar consola del sistema** abre una ventana negra
+  donde cada paso se imprime según ocurre. Es lo más fiable para ver si avanza.
+* Cualquier paso que tarde más de 3 segundos queda apuntado en el registro,
+  aunque todo acabe bien. Así se ve después qué fue lo lento.
+
+Lo único que puede tardar de verdad en un solo paso es cortar un plano en una
+malla de millones de caras: ahí son unos segundos por plano y la ventana se
+queda quieta mientras tanto. Entre plano y plano vuelve a responder.
+
 ## El registro
 
 Todo lo que hace el complemento queda apuntado: qué se cortó, cuánto tardó

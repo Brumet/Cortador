@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import time
 from typing import Optional
 
 import bpy
@@ -175,6 +176,8 @@ class CORTADOR_OT_cortar(Operator):
     _reloj = None
     _trabajo = None
     _pasos = None
+    _marca = 0.0
+    _ultimo = ""
 
     @classmethod
     def poll(cls, contexto):
@@ -201,6 +204,8 @@ class CORTADOR_OT_cortar(Operator):
         registro.de_los_ajustes(contexto.scene.cortador, ajustes, mm)
         self._trabajo = proceso.Trabajo(objeto, ajustes)
         self._pasos = self._trabajo.pasos()
+        self._marca = time.perf_counter()
+        self._ultimo = "arrancando"
         contexto.window_manager.progress_begin(0.0, 1.0)
         self._reloj = contexto.window_manager.event_timer_add(
             0.01, window=contexto.window)
@@ -209,6 +214,9 @@ class CORTADOR_OT_cortar(Operator):
 
     def modal(self, contexto, evento):
         if evento.type == "ESC":
+            registro.DIARIO.linea(f"cancelado por el usuario en: {self._ultimo}")
+            registro.DIARIO.al_bloque()
+            self.report({"WARNING"}, "Corte cancelado")
             return self._acabar(contexto, {"CANCELLED"})
         if evento.type != "TIMER":
             return {"PASS_THROUGH"}
@@ -223,8 +231,18 @@ class CORTADOR_OT_cortar(Operator):
                         f"El corte fallo: {fallo}. Esta apuntado en el "
                         "registro: guardalo y mandalo.")
             return self._acabar(contexto, {"CANCELLED"})
+        # Cuanto tardo el paso anterior. Lo lento queda apuntado aunque todo
+        # acabe bien: es lo unico que dice despues por que parecia colgado.
+        ahora = time.perf_counter()
+        tardo = ahora - self._marca
+        self._marca = ahora
+        if tardo > 3.0:
+            registro.DIARIO.linea(f"paso lento, {tardo:.1f} s: {self._ultimo}")
+        self._ultimo = texto
+        print(f"Cortador | {avance * 100:3.0f}%  {texto}")
         contexto.window_manager.progress_update(avance)
-        contexto.workspace.status_text_set(f"Cortador: {texto}")
+        contexto.workspace.status_text_set(
+            f"Cortador: {texto}  ·  Esc para parar")
         return {"RUNNING_MODAL"}
 
     def _acabar(self, contexto, estado, contar=False):

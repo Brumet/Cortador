@@ -43,6 +43,8 @@ SOBRA = 0.4
 ALTO_MIN = 3.5
 #: y la mas grande, que tampoco hace falta un cartel
 ALTO_MAX = 28.0
+#: por encima de estas caras no se graba: el booleano exacto se dispara
+CARAS_MAX = 120_000
 
 
 class Marco:
@@ -285,8 +287,20 @@ def marcar(objeto: bpy.types.Object, centro_figura: Vector, propio: str,
     el nombre de la pieza que va pegada por cada lado; las que falten
     sencillamente no se graban.
     """
+    # En una pieza muy densa el booleano exacto de Blender se dispara: puede
+    # tardar mas en grabar cinco letras que el corte entero de la figura, y
+    # mientras tanto no hay manera de pararlo. Por encima de este tamano se
+    # deja sin marcar y se avisa, que es mucho mejor que parecer colgado.
+    if len(objeto.data.polygons) > CARAS_MAX:
+        return False
     marco = marco_interior(objeto, centro_figura)
     if marco is None or marco.alto <= 0 or marco.ancho <= 0:
+        return False
+    # Si no cabe una letra legible, no se intenta siquiera. Parece una
+    # tonteria y no lo es: en un escaneo con basura suelta salen cientos de
+    # piezas de diez caras, y probar en cada una -cinco rayos, cinco mallas de
+    # texto y dos intentos- son minutos tirados en algo que no puede salir.
+    if min(marco.alto, marco.ancho) < ALTO_MIN * 6.0:
         return False
     for encogido in (1.0, 0.7):
         if _un_intento(objeto, marco, propio, vecinos, hondo, encogido):
