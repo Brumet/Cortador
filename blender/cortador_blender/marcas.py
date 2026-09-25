@@ -448,7 +448,13 @@ def _restar(objeto: bpy.types.Object, talla: bmesh.types.BMesh) -> bool:
                 motor.cerrar_huecos(objeto)
                 revision = bmesh.new()
                 revision.from_mesh(objeto.data)
-                bien = not any(e.is_boundary for e in revision.edges)
+                # Cerrada no basta: hay que volver a medirla. Si el booleano
+                # dejo la pieza peor de lo que parecia, el remate puede cerrar
+                # los bordes por donde no es y llevarse media pieza por
+                # delante; queda estanca, y es otra pieza distinta.
+                rematado = abs(revision.calc_volume(signed=True))
+                bien = (not any(e.is_boundary for e in revision.edges)
+                        and abs(rematado - volumen) < max(volumen * 0.03, 1.0))
                 revision.free()
             else:
                 bien = True
