@@ -55,7 +55,7 @@ def memoria_mb() -> float:
         import ctypes
         import ctypes.wintypes
 
-        class Cuenta(ctypes.Structure):
+        class Cuenta(ctypes.Structure):  # noqa: E301
             _fields_ = [
                 ("cb", ctypes.wintypes.DWORD),
                 ("PageFaultCount", ctypes.wintypes.DWORD),
@@ -71,10 +71,21 @@ def memoria_mb() -> float:
 
         cuenta = Cuenta()
         cuenta.cb = ctypes.sizeof(Cuenta)
-        ctypes.windll.psapi.GetProcessMemoryInfo(
-            ctypes.windll.kernel32.GetCurrentProcess(),
-            ctypes.byref(cuenta), cuenta.cb)
-        return cuenta.PeakWorkingSetSize / (1024.0 * 1024.0)
+        yo = ctypes.windll.kernel32.GetCurrentProcess()
+        # En Windows moderno la funcion vive en kernel32 con otro nombre, y
+        # psapi.dll a veces ni se carga. Se prueban las dos: si solo se mira
+        # una, la memoria sale 0 y justo cuando hace falta no se sabe nada.
+        for libreria, nombre in ((ctypes.windll.kernel32,
+                                  "K32GetProcessMemoryInfo"),
+                                 (ctypes.WinDLL("psapi"),
+                                  "GetProcessMemoryInfo")):
+            try:
+                funcion = getattr(libreria, nombre)
+            except (AttributeError, OSError):
+                continue
+            if funcion(yo, ctypes.byref(cuenta), cuenta.cb):
+                return cuenta.PeakWorkingSetSize / (1024.0 * 1024.0)
+        return 0.0
     except Exception:
         return 0.0
 
@@ -220,8 +231,12 @@ def de_la_figura(objeto, mm_por_unidad: float) -> None:
     DIARIO.dato("figura", objeto.name)
     DIARIO.dato("caras", len(malla.polygons))
     DIARIO.dato("vertices", len(malla.vertices))
-    DIARIO.dato("medidas", "{:.1f} x {:.1f} x {:.1f} mm".format(
-        *[d * mm_por_unidad for d in objeto.dimensions]))
+    medidas = [d * mm_por_unidad for d in objeto.dimensions]
+    DIARIO.dato("medidas", "{:.1f} x {:.1f} x {:.1f} mm".format(*medidas))
+    if max(medidas) > 3000.0:
+        DIARIO.linea(
+            "AVISO: la figura mide {:.1f} metros de alto. Casi siempre eso es "
+            "la escala de la escena, no la figura.".format(max(medidas) / 1000))
     DIARIO.dato("escala del objeto", tuple(round(s, 4) for s in objeto.scale))
     DIARIO.dato("modificadores sin aplicar",
                 [m.type for m in objeto.modifiers] or "ninguno")

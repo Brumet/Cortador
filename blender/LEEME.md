@@ -55,6 +55,26 @@ sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
 montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
 hueca es una tira de tres milímetros donde no cabe ni una letra.
 
+## La escala: lo primero que hay que mirar
+
+Blender no trabaja en milímetros, trabaja en **unidades**, y cuántos
+milímetros vale una unidad lo dice la escena. En una escena métrica de serie
+una unidad es **un metro**. Si modelaste o importaste la figura en
+milímetros, una virgen de 950 mm entra como 950 unidades, y para el
+complemento eso son **950 metros**.
+
+No es un detalle: con esa escala el plan de una virgen de 95 cm pasa de 37
+piezas a 686.427, y el corte no acaba nunca.
+
+El panel te dice siempre las medidas en milímetros debajo del nombre de la
+figura. Si ahí ves metros donde esperabas centímetros, sale un aviso rojo con
+un botón, **Poner la escena en milímetros**, que lo arregla de una vez
+(equivale a Escena → Unidades → Escala de unidad 0,001).
+
+Y si aun así el plan sale disparatado, el corte no empieza: avisa con el
+número de piezas y no toca nada. El tope está en 1.500 piezas y se puede
+subir en el panel si de verdad quieres más.
+
 ## Si parece que se quedó pegado
 
 El corte de una figura grande son minutos, y Blender no redibuja la ventana

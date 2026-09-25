@@ -91,6 +91,12 @@ class CortadorAjustes(PropertyGroup):
         description="Gira el reparto de gajos, para que un corte no caiga "
                     "justo en la cara de la figura",
     )
+    tope: IntProperty(
+        name="Tope de piezas", default=plan.TOPE_PIEZAS, min=10, max=200000,
+        description="Si el plan pasa de aqui, el corte no empieza y avisa. "
+                    "Casi siempre que sale un numero disparatado es que la "
+                    "escala de la escena no es la que crees",
+    )
     minimo: FloatProperty(
         name="Esquirla", default=5.0, min=0.0, max=200.0,
         description="Piezas mas pequenas que esto se avisan como esquirlas",
@@ -137,6 +143,21 @@ def _figura(contexto) -> Optional[bpy.types.Object]:
     return None
 
 
+class CORTADOR_OT_escala_mm(Operator):
+    """Pone la escena en milimetros: una unidad de Blender pasa a ser 1 mm"""
+
+    bl_idname = "cortador.escala_mm"
+    bl_label = "Poner la escena en milimetros"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, contexto):
+        contexto.scene.unit_settings.system = "METRIC"
+        contexto.scene.unit_settings.scale_length = 0.001
+        contexto.scene.unit_settings.length_unit = "MILLIMETERS"
+        self.report({"INFO"}, "Una unidad de Blender es ahora 1 mm")
+        return {"FINISHED"}
+
+
 class CORTADOR_OT_analizar(Operator):
     """Cuenta el plan sin tocar nada: cuantos pisos, cuantos gajos y que mide cada pieza"""
 
@@ -161,6 +182,11 @@ class CORTADOR_OT_analizar(Operator):
                 f"piso {piso.indice + 1}: {piso.alto * mm:.0f} mm de alto, "
                 f"{max(2 * piso.gajos, 1)} gajos"
                 + (f" y {sobra} cortes mas para que quepan" if sobra else ""))
+        if piezas > contexto.scene.cortador.tope:
+            grande = max(d * mm for d in objeto.dimensions)
+            lineas.insert(0, f"ojo: {grande:.0f} mm de largo")
+            if grande > plan.DEMASIADO_GRANDE:
+                lineas.insert(1, "revisa la escala de la escena")
         contexto.scene.cortador_informe = "\n".join(lineas)
         self.report({"INFO"}, lineas[0])
         return {"FINISHED"}
@@ -202,6 +228,25 @@ class CORTADOR_OT_cortar(Operator):
         registro.de_la_figura(objeto, mm)
         diario.titulo("Ajustes")
         registro.de_los_ajustes(contexto.scene.cortador, ajustes, mm)
+        # Antes de tocar nada: si el plan sale disparatado no se empieza. Un
+        # corte de un millon de piezas no acaba nunca, y la causa es siempre
+        # la misma -la escala-, asi que mas vale decirlo que ponerse a cortar.
+        previstas = sum(max(p.piezas, 1) for p in plan.pisos(objeto, ajustes))
+        tope = contexto.scene.cortador.tope
+        if previstas > tope:
+            grande = max(d * mm for d in objeto.dimensions)
+            aviso = (f"El plan da unas {previstas} piezas, mas del tope de "
+                     f"{tope}. La figura mide {grande:.0f} mm de largo")
+            if grande > plan.DEMASIADO_GRANDE:
+                aviso += (f" ({grande / 1000:.1f} m): revisa la escala de la "
+                          "escena, con el boton de milimetros del panel")
+            else:
+                aviso += ". Sube el tope si de verdad quieres tantas"
+            diario.linea("NO se corto: " + aviso)
+            diario.al_bloque()
+            self.report({"ERROR"}, aviso)
+            return {"CANCELLED"}
+
         self._trabajo = proceso.Trabajo(objeto, ajustes)
         self._pasos = self._trabajo.pasos()
         self._marca = time.perf_counter()
@@ -447,6 +492,15 @@ class CORTADOR_PT_panel(Panel):
         ancho, fondo, alto = (d * mm for d in objeto.dimensions)
         trazo.label(text=f"{objeto.name}: {ancho:.0f} x {fondo:.0f} x "
                          f"{alto:.0f} mm, {len(objeto.data.polygons)} caras")
+        if max(ancho, fondo, alto) > plan.DEMASIADO_GRANDE:
+            caja = trazo.box()
+            caja.alert = True
+            caja.label(text=f"Esta figura mide {max(ancho, fondo, alto) / 1000:.1f} "
+                            "metros", icon="ERROR")
+            caja.label(text="Si la modelaste en milimetros, la escena")
+            caja.label(text="esta mal: 1 unidad vale "
+                            f"{mm:g} mm ahora mismo.")
+            caja.operator("cortador.escala_mm", icon="DRIVER_DISTANCE")
 
         columna = trazo.column(align=True)
         columna.prop(datos, "modo_pisos")
@@ -464,6 +518,7 @@ class CORTADOR_PT_panel(Panel):
 
         trazo.prop(datos, "pared")
         trazo.prop(datos, "minimo")
+        trazo.prop(datos, "tope")
         trazo.prop(datos, "marcar")
         if datos.marcar:
             trazo.prop(datos, "hondo")
@@ -497,7 +552,8 @@ class CORTADOR_PT_panel(Panel):
         fila.operator("cortador.registro_guardar", icon="FILE_TEXT")
 
 
-CLASES = (CortadorAjustes, CORTADOR_OT_analizar, CORTADOR_OT_cortar,
+CLASES = (CortadorAjustes, CORTADOR_OT_escala_mm, CORTADOR_OT_analizar,
+          CORTADOR_OT_cortar,
           CORTADOR_OT_exportar, CORTADOR_OT_plano,
           CORTADOR_OT_registro_copiar, CORTADOR_OT_registro_guardar,
           CORTADOR_OT_registro_revisar, CORTADOR_PT_panel)

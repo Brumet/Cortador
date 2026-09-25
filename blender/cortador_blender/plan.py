@@ -36,6 +36,10 @@ from .perfiles import Perfil
 
 #: cuantos puntos como mucho se usan para medir un gajo
 MUESTRA = 60_000
+#: mas piezas que esto y casi seguro que lo que esta mal es la escala
+TOPE_PIEZAS = 1500
+#: una figura mas alta que esto en milimetros huele a escala equivocada
+DEMASIADO_GRANDE = 3000.0
 #: por debajo de esto no se molesta en hacer gajos
 GAJOS_MIN = 1
 #: y por encima tampoco, que ya seria una figura imposible de montar
