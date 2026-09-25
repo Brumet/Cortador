@@ -40,9 +40,9 @@ El espesor y la escala los pones tú, que para eso los ves:
 
 ## Las marcas
 
-Cada pieza lleva grabado en la cara de dentro, con medio milímetro de hondo,
-su propio nombre en el centro y, más pequeño, el de la pieza que va pegada
-por arriba, por abajo, por la izquierda y por la derecha:
+Cada pieza lleva grabado en la cara de dentro, apenas tres décimas de
+milímetro de hondo, su propio nombre en el centro y, más pequeño, el de la
+pieza que va pegada por arriba, por abajo, por la izquierda y por la derecha:
 
 ```
             P1/L3
@@ -54,6 +54,19 @@ Así una pieza suelta encima de la mesa ya dice dónde va y por dónde sigue,
 sin plano ni lista. Va en la cara de dentro, que no se ve con la figura
 montada, y nunca en la cara de corte: esa es la que se pega, y en una figura
 hueca es una tira de tres milímetros donde no cabe ni una letra.
+
+Cuál es la cara de dentro no se adivina por la forma de la pieza: se le
+pregunta a la figura a rayos. La cara de dentro da al hueco, y el hueco está
+cerrado por todas partes, así que un rayo que sale de ahí choca siempre
+contra la pared de enfrente; el que sale de la cara de fuera se va y no
+vuelve. Por eso la marca cae bien también en una oreja, en un pliegue del
+manto o en cualquier chapa fina, donde mirando «hacia el centro de la figura»
+salía una de cada dos veces por fuera.
+
+El hondo que pones en el panel es un **máximo**, no una orden: en cada letra
+se mide cuánto material hay debajo y nunca se hunde más de la cuarta parte.
+En la panza de la figura la marca sale entera; en un borde de medio milímetro
+sale más suave o no sale, pero no atraviesa la pieza.
 
 ## La escala: lo primero que hay que mirar
 

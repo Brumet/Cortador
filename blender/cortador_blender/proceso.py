@@ -20,6 +20,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Tuple
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -102,15 +103,54 @@ def _mudar(objeto: bpy.types.Object, coleccion: bpy.types.Collection) -> None:
 
 
 def _es_esquirla(objeto: bpy.types.Object, minimo: float) -> bool:
-    """Si la pieza es una miga del corte y no vale la pena ni contarla.
+    """Si lo que salio del corte no es una pieza y hay que tirarlo.
 
-    Un escaneo trae casi siempre basura suelta -motas de un milimetro que el
-    escaner metio y nadie vio-, y al cortar cada mota sale como pieza. Mil
-    migas no estorban solo en la lista: cada una se cierra, se mide, se busca
-    a sus vecinas y se intenta grabar, y eso es lo que convierte un corte de
-    dos minutos en uno de media hora. Se tiran aqui, y se dice cuantas.
+    Hay tres cosas que salen del corte y no se pueden imprimir, y las tres se
+    van por aqui:
+
+    * La **miga**. Un escaneo trae casi siempre basura suelta -motas de un
+      milimetro que el escaner metio y nadie vio-, y al cortar cada mota sale
+      como pieza. Mil migas no estorban solo en la lista: cada una se cierra,
+      se mide, se busca a sus vecinas y se intenta grabar, y eso es lo que
+      convierte un corte de dos minutos en uno de media hora.
+    * La **aguja**. Una tira de 13 x 2 x 2: mide trece de largo, asi que por
+      la medida mas grande pasaba el filtro de antes, pero no hay boquilla que
+      saque eso. Se mira la segunda medida, no la primera: una pieza de verdad
+      es ancha en dos direcciones aunque sea una lamina.
+    * El **plano suelto**. Un trozo de malla sin espesor, de los que deja un
+      modelo roto por donde el corte no encontro solido. En la escena parece
+      una pieza -tiene caras, tiene nombre, se puede seleccionar- pero no
+      encierra nada y al laminar sale vacio. Se reconoce porque no tiene
+      volumen.
+
+    Lo que **no** se tira es una lamina legitima: doscientos por ciento
+    cuarenta y cinco por cinco de espesor de pared es una pieza perfectamente
+    imprimible, y tiene volumen de sobra.
     """
-    return max(objeto.dimensions) < minimo
+    medidas = sorted(objeto.dimensions)
+    if medidas[1] < minimo:
+        return True                       # miga o aguja
+    if len(objeto.data.polygons) < 4:
+        return True                       # con tres caras no hay solido
+    return _sin_cuerpo(objeto, minimo)
+
+
+def _sin_cuerpo(objeto: bpy.types.Object, minimo: float) -> bool:
+    """Si la pieza no encierra material: una lamina rota, no un solido."""
+    bm = bmesh.new()
+    bm.from_mesh(objeto.data)
+    try:
+        # El volumen se mide desde el propio centro de la pieza. En una malla
+        # cerrada da igual desde donde se mida; en una rota -que es justo lo
+        # que estamos buscando- sale un disparate si el origen le queda lejos,
+        # y entonces un plano suelto de medio metro pasaria por pieza.
+        esquinas = [Vector(v) for v in objeto.bound_box]
+        centro = sum(esquinas, Vector()) / len(esquinas)
+        bmesh.ops.translate(bm, verts=bm.verts[:], vec=-centro)
+        volumen = abs(bm.calc_volume(signed=True))
+    finally:
+        bm.free()
+    return volumen < minimo ** 3
 
 
 def _centro(objeto: bpy.types.Object) -> Vector:
@@ -239,6 +279,7 @@ class Trabajo:
         self.eje = plan.eje_de(objeto)
         esquinas = [objeto.matrix_world @ Vector(v) for v in objeto.bound_box]
         self.centro = sum(esquinas, Vector()) / len(esquinas)
+        self.alto = (max(p.z for p in esquinas) - min(p.z for p in esquinas))
 
     def pasos(self) -> Iterator[Tuple[str, float]]:
         ajustes = self.ajustes
@@ -334,8 +375,10 @@ class Trabajo:
         if migas:
             diario.dato("migas tiradas", migas)
             self.resultado.avisos.append(
-                f"{migas} migas mas pequenas que el minimo se tiraron: son "
-                "basura del corte, no piezas.")
+                f"Se tiraron {migas} trozos que no son piezas: migas, "
+                "agujas y planos sueltos sin volumen. Si te esperabas mas "
+                "piezas, mira el modelo de partida: eso sale de una malla "
+                "rota o de basura suelta del escaneo.")
         finales = apretadas
 
         # --- rematar, medir y bautizar -------------------------------------
@@ -389,7 +432,8 @@ class Trabajo:
         with diario.paso("buscar vecinas"):
             marcos = {}
             for pieza in self.resultado.piezas:
-                marco = marcas.marco_interior(pieza.objeto, self.centro)
+                marco = marcas.marco_interior(pieza.objeto, self.centro,
+                                              self.eje, self.alto, self.objeto)
                 if marco is not None:
                     marcos[pieza.objeto.name] = marco
             self.resultado.vecinos = marcas.vecindario(self.resultado.piezas,
@@ -431,7 +475,9 @@ class Trabajo:
             reloj = time.perf_counter()
             puesta = marcas.marcar(pieza.objeto, self.centro,
                                    nombre.replace("-", "/"), vecinas,
-                                   self.ajustes.hondo)
+                                   self.ajustes.hondo, self.ajustes.pared,
+                                   self.eje, self.alto, self.objeto,
+                                   marcos[nombre])
             tardo = time.perf_counter() - reloj
             if puesta:
                 hechas += 1
@@ -445,8 +491,11 @@ class Trabajo:
         sin = len(piezas) - hechas
         if sin:
             self.resultado.avisos.append(
-                f"{sin} piezas se quedaron sin marcar: no habia cara interior "
-                "suficiente o el grabado habria roto la pieza.")
+                f"{sin} piezas se quedaron sin marcar. O no tienen cara de "
+                "dentro donde leerla -pasa si la figura va maciza o si la "
+                "pieza se cierra sobre si misma-, o no cabe una letra "
+                "legible, o el grabado habria roto la pieza. Antes de marcar "
+                "por fuera, mejor sin marcar.")
 
     def _resumir(self) -> None:
         """Los avisos que hay que dar al acabar, en lenguaje de taller."""

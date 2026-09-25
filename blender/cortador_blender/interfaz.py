@@ -99,7 +99,9 @@ class CortadorAjustes(PropertyGroup):
     )
     minimo: FloatProperty(
         name="Esquirla", default=5.0, min=0.0, max=200.0,
-        description="Piezas mas pequenas que esto se avisan como esquirlas",
+        description="Lo que salga del corte y no llegue a esto de ancho en dos "
+                    "direcciones se tira: son migas y planos sueltos de malla "
+                    "rota, no piezas",
     )
     marcar: BoolProperty(
         name="Marcar las piezas", default=True,
@@ -107,8 +109,9 @@ class CortadorAjustes(PropertyGroup):
                     "las que van pegadas a ella",
     )
     hondo: FloatProperty(
-        name="Hondo de la marca", default=0.6, min=0.1, max=3.0,
-        description="Cuanto se hunde el grabado, en milimetros",
+        name="Hondo de la marca", default=0.3, min=0.05, max=3.0,
+        description="Cuanto se hunde el grabado, en milimetros. Es un maximo: "
+                    "en una pieza fina se graba menos, para no atravesarla",
     )
     carpeta: StringProperty(
         name="Carpeta", subtype="DIR_PATH",

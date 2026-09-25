@@ -22,7 +22,7 @@ El reparto de archivos:
 bl_info = {
     "name": "Cortador",
     "author": "Brumet",
-    "version": (0, 4, 0),
+    "version": (0, 5, 0),
     "blender": (3, 6, 0),
     "location": "Vista 3D > barra lateral (N) > Cortador",
     "description": "Corta figuras grandes en piezas que caben en la impresora",
