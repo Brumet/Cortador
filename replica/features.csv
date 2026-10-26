@@ -1,0 +1,28 @@
+feature,area,priority,original,clone,notes
+Partir un modelo grande en piezas que quepan en la maquina,corte,must,yes,yes,Cortador lo hace en pisos horizontales y gajos radiales
+Piezas estancas tras el corte,corte,must,yes,yes,Tapado por Delaunay con regla de winding; material exacto en la bateria
+Comprobar que cada pieza cabe en la cama,corte,must,yes,yes,Incluye cama redonda medida por diagonal y no por cuadrado inscrito
+Conectores automaticos en las juntas,conectores,must,yes,partial,Cortador 0.6.0 saca el cilindro (dowel); desactivado por defecto; 94% de encaje en figura limpia
+Elegir la forma del conector,conectores,must,yes,no,LuBan ofrece plug dowel terrace pyramid; Cortador solo cilindro
+Tolerancia del conector configurable,conectores,must,yes,yes,Cortador lo llama juego del agujero; por defecto 0.15 mm
+Profundidad del conector configurable,conectores,should,yes,no,En Cortador sale de la pared y no se puede tocar
+Numerar las piezas,montaje,must,yes,yes,Cortador usa P2-L5: piso 2 lamina 5; las laminas se numeran dando la vuelta al piso
+Secuencia de montaje,montaje,must,yes,yes,Cortador saca un PDF con un render por piso y tabla de que va con que
+Grabar el nombre en la propia pieza,montaje,should,no,yes,Cortador graba nombre y vecinas por dentro; no consta que LuBan lo haga
+Empaquetar las piezas contra el tamano de la plancha,corte,must,yes,no,El proyecto del MIT lo hacia; Cortador aprovecha 41-45% de la cama en figuras tipo estatua
+Ahuecar el modelo,preparacion,should,yes,no,En Cortador lo hace el usuario con Solidificar antes de cortar; decision tomada
+Planos de corte colocados a mano,corte,should,yes,no,Cortador es automatico; no hay forma de vetar un corte que parte la cara
+Ver el modelo y los cortes en 3D antes de ejecutar,corte,must,yes,yes,Lo pone Blender; Cortador anade Ver el plan con las medidas de cada pieza
+Perfiles de maquina,corte,should,no,yes,Cortador trae perfiles con la cama de cada impresora; LuBan pide el tamano a mano
+Aviso si la escala de la escena esta mal,corte,could,no,yes,Cortador frena y avisa; nacio de un fallo real de 950 metros
+Registro de rendimiento exportable,diagnostico,could,no,yes,Diario del panel para poder mandarlo cuando algo falla
+Filtrar migas y planos sueltos del corte,corte,should,unknown,yes,Cortador tira lo que no llega al minimo en dos medidas o no encierra volumen
+Juntas de dedo para paneles planos,laser,could,yes,skip,Modo plate de LuBan; Cortador es para impresion 3D
+Rebanadas planas apilables,laser,could,yes,skip,Modo stack de LuBan; corte laser
+Rejilla relieve y estructura de alambre,laser,could,yes,skip,Modos hash relief wireframe; fuera de alcance
+Convertir fotos en modelos,otros,could,yes,skip,Lithophane Photo Magic Teacup Squama; es otro producto
+Disenar monturas de gafas,otros,could,yes,skip,Modulo Eyeglasses; es otro producto
+Firma oculta en la malla para rastrear autoria,otros,could,yes,skip,MeshSafe es un programa aparte del mismo equipo
+Llave USB y gestion de licencias,negocio,could,yes,skip,Cortador es un complemento gratuito dentro de Blender
+Soporte de Linux,plataforma,could,no,yes,LuBan no soporta Linux; Cortador corre donde corra Blender
+Exportar STL de cada pieza,salida,must,yes,yes,Cortador guarda la carpeta entera de un tiron
