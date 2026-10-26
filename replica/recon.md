@@ -1,15 +1,24 @@
 # Recon map: LuBan (escritorio, Windows y Mac)
 
-Alcance: el módulo **Mesh Processing**, y dentro de él partir una figura
-grande en piezas imprimibles con conectores y guía de montaje. Lo demás que
-hace LuBan queda fuera a propósito (ver *Fuera de alcance*).
+Alcance: el módulo **Mesh Processing**. Cuatro áreas, por orden de interés:
+el **corte** en piezas imprimibles con conectores, las **cajas de luz**, los
+**moldes de galleta** y los **rompecabezas**.
 Para: Cortador, el complemento de Blender para talleres de impresión 3D.
 Fecha: 2026-10-26
 
-> **Esto no es un clon.** Cortador ya existe y hace la mayor parte de esto.
-> Lo que se busca aquí es el inventario completo de LuBan para decidir qué le
-> falta a Cortador y merece la pena traer. Nada de decompilar, nada de copiar
-> código, textos ni imágenes.
+> **Esto no es un clon.** La intención, en palabras del dueño: *«no es
+> copiarlo tal cual, es saber cómo realizan los cortes y mejorar todo
+> apoyándome en Blender para tener más potencia»*. Se inventaría qué hace y
+> con qué parámetros, para rehacerlo mejor. No se copia código, ni textos, ni
+> imágenes.
+
+> **Corrección (26-10).** En la primera pasada dije que el `LuBan_1.exe` del
+> chat no era LuBan, y era falso: busqué los nombres de los módulos en UTF-16
+> cuando están en ASCII. El ejecutable **sí es LuBan**, y lleva dentro su
+> tabla de textos completa: los nombres de los modos, los de cada parámetro y
+> los mensajes de error. Eso es lo que alimenta el apartado siguiente. Lo que
+> me despistó fue el DICOM que lleva dentro, que está ahí porque importa
+> tomografías para convertirlas en modelos.
 
 ---
 
@@ -85,6 +94,103 @@ decir: el empaquetado contra el tamaño de la plancha estaba en el ADN del
 proyecto desde el principio. Es justo lo que Cortador hace peor.
 
 ---
+
+## Inventario desde el propio programa
+
+Sacado de la tabla de textos del ejecutable: los rótulos de los diálogos, los
+nombres de los parámetros y los mensajes de error. Es, en la práctica, leer
+los menús del programa sin abrirlo. **No se ha decompilado nada**: no hay
+código desensamblado aquí, y no lo habría a un coste razonable —son 20 MB de
+C++ con CGAL dentro—. El flujo, en sus propias palabras:
+`File -> Open the model, then Mesh -> LuBan`.
+
+### Los 21 modos de Mesh Processing
+
+`Block · Clicker · Cocoon · Connectors · Contour · Folding · Grill · Hash ·
+Helix · Pipe · Pipes · Relief · Revolving · Slide · Spinner · Spring · Stack ·
+Tiling · Tumbler · Wave · Wireframe`
+
+Y los patrones de teselado: `Triangle · Square · Pentagon · Hexagon ·
+Octagon · Quadrangle · Voronoi`.
+
+El sitio web sólo nombraba siete formas. Son veintiuna.
+
+### Corte y uniones
+
+Formas de conector **reales**, leídas del programa: `Plug · Dowel · Clip ·
+Puzzle · Pyramid`. La prensa hablaba de *terrace*; esa palabra no aparece por
+ningún lado, y en cambio sí `Clip` y `Puzzle`, que nadie había mencionado.
+
+Parámetros alrededor del corte y las uniones:
+
+`Dowel size · Tolerance · Socket width · Socket height · Tab size · Dual ·
+Separation · Slide width · Axle diameter · Bury · Finger width · Base offset ·
+Top offset · Base height · Top height · Position (-1,1) · Direction ·
+Offset X/Y/Z`
+
+Piezas y nombres de salida: `Part_1`, `Part_2`, `Plane`, `Conn_`, `Pipe_`,
+`Outer`, `Inner`, `Body`.
+
+Avisos que da cuando algo no cabe —útiles, porque dicen dónde están sus
+límites—: *«Tolerance must be less than half of the slide width»*,
+*«Tolerance must be less than half of the sheet thickness»*, *«Boolean
+operation failed»*, *«Try changing the tolerance slightly»*.
+
+Ese último par importa: **LuBan también se pelea con los booleanos**, y
+también resuelve la holgura como fracción del espesor. Es exactamente el
+problema que dio las espigas de Cortador.
+
+### Empaquetado en hojas
+
+Diálogos `Dlg_Nest` y `Dlg_Nest3D`. Etiquetas `Sheet_`, `G_sheet_`,
+`B_sheet_`, `BEGIN_PLATE`, `END_PLATE`, y el error *«Failed to generate
+plates»*, *«Sheet width is too large»*, *«Sheet height is too large»*.
+
+**Hay empaquetado en 2D y en 3D, en diálogos separados.** Es lo que falta en
+Cortador, y es la función con la que nació el proyecto en el MIT.
+
+### Cajas de luz
+
+`Box inner height · Box thickness · Lid · Lip thickness · Stopper width ·
+Base of color · Color layer · Solid top · Layer height · Layer offset ·
+Reinforced bar · Bar thickness · Slit width · Chamber height · Duct gap ·
+Duct length · Opening · Wire width · Base light socket · Backlight ·
+Text 1 / Text 2 / Text 3 · Text baseline · Level of detail · Ridge scale ·
+Width in X · Depth in Y · Height in Z · X/Y/Z section · Clipping`
+
+Avisos: *«Box thickness too big»*, *«Big thickness, strong color»*.
+
+No es sólo un litofano: es la **caja entera** —tapa con labio, tope, hueco
+para el portalámparas, conducto del cable, barra de refuerzo— con hasta tres
+textos y línea base.
+
+### Moldes de galleta
+
+`Number of blades · Blade angle · Blade length · Blade width · Blade root
+width · Blade thickness · Blade height · Shaft diameter · Shaft length ·
+Tolerance · One body · Assembly · Base offset · Bottom offset · Brim ·
+Contour width · Base thickness`
+
+Con una nota del propio programa que explica su tolerancia: *«A negative
+value compensates for material expansion in 3D printing of the shaft hole»*.
+
+Dos modos de salida: **One body** (todo de una pieza) y **Assembly** (cortador
+y mango por separado, unidos por un eje). Prefijos `BC_ONE`, `BC_NB`,
+`BC_BA`, `BC_BL`, `BC_BW`.
+
+### Rompecabezas y piezas que encajan
+
+`Tab size · Dual · Cell · Cell size X · Cell size Y · Block size · Wall
+thickness · Clicker size XY · Pressed length · Base size XY · Base length ·
+Max fold · Thickness · Scale X/Y · Angle X/Y/Z`
+
+Avisos: *«The position should have one contour only»*, *«The model size is
+too small for the clicker»*, *«Position must be in between (-1, 1)»*.
+
+`Clicker` es un mecanismo de clic impreso —de ahí *Pressed length*—, no un
+rompecabezas plano. El rompecabezas propiamente dicho sale de `Puzzle` como
+forma de conector y de `Tab size`.
+
 
 ## Pantallas
 
@@ -210,9 +316,9 @@ Must: 10 · Should: 7 · Could: 5 · Skip: 7
 
 Cosas de LuBan que no se tocan, y por qué:
 
-- **Eyeglasses, Lithophane, Photo Magic, Teacup, Squama, Thermal, Photo
-  clicker** — son otro producto. Convertir fotos en relieves no tiene nada
-  que ver con partir una figura para imprimirla.
+- **Eyeglasses, Photo Magic, Teacup, Squama, Thermal, Photo clicker** — son
+  otro producto. (El **litofano** ya no está fuera: entra como parte de las
+  cajas de luz.)
 - **MeshSafe** — firma oculta en la malla para rastrear quién compró un
   modelo. Producto aparte, y problema ajeno a un taller que imprime lo suyo.
 - **Corte láser y fresado CNC** (modos *stack*, *plate*, *hash*, *relief*,

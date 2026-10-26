@@ -34,14 +34,14 @@ ideas y los enfoques no son de nadie; el código y los textos sí.
 **No es Snapmaker Luban.** Ese es el laminador de las máquinas Snapmaker y no
 viene al caso.
 
-**No es el `LuBan_1.exe` que se subió al chat.** Se miró por fuera, sin
-ejecutarlo, y es otra cosa: un ejecutable PE32+ de Windows en C++ con
-wxWidgets que lleva dentro **DCMTK** (imagen médica DICOM), **CGAL**, dlib,
-captura de vídeo y USB Cypress, con clases de metrología (`CRuler`,
-`CProtractor`, `CCircleDet`, `CHeightMap`, `CVolume`, `CPolarMap`) y un
-`Dlg_Gcode`. Es un programa de medición o microscopía con módulo de impresión.
-Si hace falta volver a identificarlo, el fichero ya no está: el contenedor es
-efímero y se borró.
+**El `LuBan_1.exe` del chat sí es LuBan.** En una primera pasada se dijo que
+no, y era falso: se buscaron los nombres de los módulos en UTF-16 cuando están
+en ASCII. Dentro aparecen `LuBan`, `luban3d`, `Lithophane`, `Eyeglass`,
+`PhotoMagic`, `Wireframe`, `Relief`. Es un PE32+ de Windows en C++ con
+wxWidgets, CGAL, dlib y **DCMTK** —el DICOM está ahí porque importa
+tomografías para convertirlas en modelos, no porque sea un programa médico—.
+Su tabla de textos lleva los nombres de los 21 modos y de cada parámetro: es
+la fuente del inventario de `replica/recon.md`.
 
 **El LuBan que importa** es el programa comercial para imprimir objetos muy
 grandes partiéndolos en piezas. Lo que se sabe de fuentes públicas:

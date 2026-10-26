@@ -26,3 +26,22 @@ Firma oculta en la malla para rastrear autoria,otros,could,yes,skip,MeshSafe es 
 Llave USB y gestion de licencias,negocio,could,yes,skip,Cortador es un complemento gratuito dentro de Blender
 Soporte de Linux,plataforma,could,no,yes,LuBan no soporta Linux; Cortador corre donde corra Blender
 Exportar STL de cada pieza,salida,must,yes,yes,Cortador guarda la carpeta entera de un tiron
+Empaquetado 2D de piezas en hojas,empaquetado,must,yes,no,Dlg_Nest; etiquetas Sheet_ G_sheet_ B_sheet_ BEGIN_PLATE
+Empaquetado 3D contra el volumen de impresion,empaquetado,must,yes,no,Dlg_Nest3D; dialogo aparte del 2D
+Conector tipo Clip,conectores,should,yes,no,Leido del binario; la prensa no lo menciona
+Conector tipo Puzzle,conectores,should,yes,no,Encaje de rompecabezas; resiste traccion al contrario que el cilindro
+Conector tipo Plug y Pyramid,conectores,could,yes,no,Las otras dos formas que declara el programa
+Caja de luz completa con tapa y labio,caja de luz,must,yes,no,Box inner height Lid Lip thickness Stopper width
+Hueco para portalamparas y conducto de cable,caja de luz,should,yes,no,Base light socket Chamber height Duct gap Duct length Opening Wire width
+Barra de refuerzo interior,caja de luz,should,yes,no,Reinforced bar Bar thickness Slit width
+Litofano por capas de color,caja de luz,must,yes,no,Layer height Layer offset Color layer Base of color Solid top
+Tres textos con linea base en la caja,caja de luz,could,yes,no,Text 1 Text 2 Text 3 Text baseline
+Molde de galleta de una pieza,galletas,must,yes,no,Modo One body; prefijo BC_ONE
+Molde de galleta en dos piezas con eje,galletas,must,yes,no,Modo Assembly; cortador y mango unidos por eje
+Cuchilla parametrica,galletas,must,yes,no,Number of blades Blade angle length width root width thickness height
+Tolerancia negativa que compensa la dilatacion,galletas,should,yes,no,Nota del propio programa sobre el agujero del eje
+Borde de adherencia,galletas,could,yes,no,Brim
+Rompecabezas por celdas,rompecabezas,should,yes,no,Cell Cell size X Cell size Y Tab size Dual
+Mecanismo de clic impreso,rompecabezas,could,yes,no,Clicker size XY Pressed length Base size XY Base length
+Plegado con limite de doblez,rompecabezas,could,yes,no,Folding Max fold
+Teselado con siete patrones,rompecabezas,could,yes,no,Triangle Square Pentagon Hexagon Octagon Quadrangle Voronoi
