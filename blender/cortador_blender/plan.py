@@ -67,6 +67,10 @@ class Ajustes:
     marcar: bool = True
     #: hondo del grabado
     hondo: float = 0.6
+    #: poner taco y agujero en cada junta, para que las piezas se encajen
+    espigas: bool = True
+    #: juego entre el taco y su agujero
+    holgura: float = 0.15
 
 
 @dataclass

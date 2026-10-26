@@ -417,6 +417,13 @@ def _restar(objeto: bpy.types.Object, talla: bmesh.types.BMesh) -> bool:
     malla = bpy.data.meshes.new("cortador_talla")
     talla.to_mesh(malla)
     tallado = bpy.data.objects.new("cortador_talla", malla)
+    # La talla esta hecha en las coordenadas de la pieza, asi que el objeto que
+    # la lleva tiene que estar colocado como la pieza. Si no, Blender la pone
+    # en el sitio del mundo y el booleano resta donde no hay nada: la pieza
+    # sale intacta, sin un bulto ni un aviso, y el complemento dice que la
+    # marco. Pasa en cuanto la figura no tiene el origen en el centro del
+    # mundo, que es lo normal al importar un STL.
+    tallado.matrix_world = objeto.matrix_world.copy()
     bpy.context.scene.collection.objects.link(tallado)
 
     antes = objeto.data

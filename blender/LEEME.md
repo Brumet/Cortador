@@ -68,6 +68,28 @@ se mide cuánto material hay debajo y nunca se hunde más de la cuarta parte.
 En la panza de la figura la marca sale entera; en un borde de medio milímetro
 sale más suave o no sale, pero no atraviesa la pieza.
 
+## Las espigas (en pruebas)
+
+Marcada la casilla **Espigas en las juntas**, en cada cara de pegado sale un
+taco en una pieza y el agujero que le corresponde en la de enfrente. Las dos
+piezas encajan en una sola posición, se sujetan solas mientras seca el
+pegamento y la junta aguanta más, porque el pegamento deja de trabajar solo a
+cortante.
+
+El taco es pequeño a propósito: poco menos de la mitad de la pared de
+diámetro, que en una pared de 3 mm son 1,35. Un taco más gordo se sale de la
+tira de pegado y asoma por la cara buena.
+
+**Viene desactivada**, y por una razón honesta: en una figura limpia encaja
+el 89 % de las espigas, y el resto se queda sin taco —lo cual no estorba,
+esa junta se pega a tope como siempre—. En figuras con la piel cruzada
+consigo misma, que es lo que deja Solidificar en cualquier recoveco, no he
+podido medirlo con garantías. Pruébala en dos piezas sueltas antes de lanzar
+una tirada entera.
+
+Si tu impresora saca las piezas justas, sube el **juego del agujero** antes
+que tocar nada más.
+
 ## La escala: lo primero que hay que mirar
 
 Blender no trabaja en milímetros, trabaja en **unidades**, y cuántos

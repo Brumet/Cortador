@@ -25,6 +25,7 @@ import bpy
 from mathutils import Vector
 
 from . import cortar as motor
+from . import espigas
 from . import marcas
 from . import registro
 from . import plan
@@ -448,6 +449,13 @@ class Trabajo:
             diario.linea(f"grabar las marcas: "
                          f"{time.perf_counter() - reloj:.1f} s")
 
+        if ajustes.espigas and len(self.resultado.piezas) > 1:
+            reloj = time.perf_counter()
+            for texto, avance in self._espigar():
+                yield (texto, avance)
+            diario.linea(f"espigas de las juntas: "
+                         f"{time.perf_counter() - reloj:.1f} s")
+
         global ULTIMO
         self.resultado.figura = self.objeto.name
         ULTIMO = self.resultado
@@ -496,6 +504,35 @@ class Trabajo:
                 "pieza se cierra sobre si misma-, o no cabe una letra "
                 "legible, o el grabado habria roto la pieza. Antes de marcar "
                 "por fuera, mejor sin marcar.")
+
+    def _espigar(self):
+        """Pone taco y agujero en cada junta, para que las piezas encajen."""
+        diario = registro.DIARIO
+        trabajo = espigas.poner(self.resultado.piezas, self.ajustes.pared,
+                                self.ajustes.holgura)
+        juntas = puestas = 0
+        fallos: List[str] = []
+        try:
+            while True:
+                texto, hecho, total, _ = next(trabajo)
+                yield (f"{texto} ({hecho + 1} de {total})",
+                       0.94 + 0.05 * hecho / max(total, 1))
+        except StopIteration as fin:
+            if fin.value:
+                juntas, puestas, fallos = fin.value
+        diario.dato("juntas con espiga", juntas)
+        diario.dato("espigas puestas", puestas)
+        if fallos:
+            diario.linea(f"sin espiga por no romperlas: {', '.join(fallos[:8])}"
+                         f"{'...' if len(fallos) > 8 else ''}")
+            self.resultado.avisos.append(
+                f"{len(fallos)} piezas se quedaron sin espiga: el booleano "
+                "las habria roto y se prefirio dejarlas lisas. Esas se pegan "
+                "a tope, como siempre.")
+        elif juntas:
+            self.resultado.avisos.append(
+                f"{puestas} espigas en {juntas} juntas. Encajan en una sola "
+                "posicion: prueba en seco antes de echar pegamento.")
 
     def _resumir(self) -> None:
         """Los avisos que hay que dar al acabar, en lenguaje de taller."""
