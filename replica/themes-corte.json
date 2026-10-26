@@ -1,0 +1,103 @@
+{
+  "_about": "Temas para cortar figuras grandes en piezas imprimibles. Patrones en ingles porque las fuentes lo estan.",
+  "request_patterns": [
+    "\\bi wish\\b",
+    "\\bplease\\b",
+    "\\bwould be (nice|great|good)\\b",
+    "\\bcan'?t just\\b",
+    "\\bdoesn'?t let\\b",
+    "\\bno way to\\b",
+    "\\bavailable soon\\b"
+  ],
+  "themes": [
+    {
+      "kind": "complaint",
+      "patterns": [
+        "\\$\\d",
+        "expensive",
+        "price",
+        "cost",
+        "daunting",
+        "affordable",
+        "lifetime license"
+      ],
+      "id": "precio",
+      "label": "Precio"
+    },
+    {
+      "kind": "complaint",
+      "patterns": [
+        "repeat the process",
+        "multiple planes",
+        "using a grid",
+        "one at a time",
+        "headache",
+        "screwing something up"
+      ],
+      "id": "repetir-a-mano",
+      "label": "Hay que repetir el corte a mano"
+    },
+    {
+      "kind": "request",
+      "patterns": [
+        "build volume",
+        "decide cut lines",
+        "tell it my printer",
+        "automatic",
+        "smart split"
+      ],
+      "id": "sin-volumen-de-impresion",
+      "label": "No decide los cortes a partir del volumen de impresion"
+    },
+    {
+      "kind": "complaint",
+      "patterns": [
+        "check fit",
+        "import into a slicer",
+        "build plate",
+        "doesn'?t fit",
+        "fit when cutting"
+      ],
+      "id": "sin-comprobar-encaje",
+      "label": "No se ve si la pieza cabe sin exportar"
+    },
+    {
+      "kind": "complaint",
+      "patterns": [
+        "no more than \\d",
+        "a dozen",
+        "18-20",
+        "too many parts",
+        "only useful if"
+      ],
+      "id": "se-cae-con-muchas-piezas",
+      "label": "Se cae por encima de una docena de piezas"
+    },
+    {
+      "kind": "complaint",
+      "patterns": [
+        "user interface",
+        "\\bUI\\b",
+        "clunky",
+        "confusing",
+        "isn'?t as good"
+      ],
+      "id": "interfaz",
+      "label": "Interfaz"
+    },
+    {
+      "kind": "complaint",
+      "patterns": [
+        "Meshmixer",
+        "TinkerCAD",
+        "Fusion 360",
+        "OpenSCAD",
+        "Gimp",
+        "already supported",
+        "Blender"
+      ],
+      "id": "apanos-con-otras",
+      "label": "Se apanan con otras herramientas"
+    }
+  ]
+}

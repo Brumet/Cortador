@@ -45,3 +45,6 @@ Rompecabezas por celdas,rompecabezas,should,yes,no,Cell Cell size X Cell size Y 
 Mecanismo de clic impreso,rompecabezas,could,yes,no,Clicker size XY Pressed length Base size XY Base length
 Plegado con limite de doblez,rompecabezas,could,yes,no,Folding Max fold
 Teselado con siete patrones,rompecabezas,could,yes,no,Triangle Square Pentagon Hexagon Octagon Quadrangle Voronoi
+Dibujar la cama en el visor y marcar en rojo lo que no cabe,corte,should,no,no,Lo pide la cita de check fit; lo tiene Split-3DPrint y Cortador no
+Huecos para iman de neodimio en las juntas,conectores,should,no,no,Idea de Split-3DPrint; 5x2 a 10x3 mm cortados 0.1 mm mas grandes
+Vista explosionada de la figura montada,montaje,could,no,no,Lo tiene Split-3DPrint; Cortador lo resuelve con el PDF
